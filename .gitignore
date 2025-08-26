@@ -1,0 +1,28 @@
+# Proxmox credentials
+credentials.pkr.hcl
+
+# SSH keys
+*.pem
+*.pub
+id_rsa*
+
+# Packer cache
+packer_cache/
+*.box
+
+# Temporary files
+*.tmp
+*.log
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

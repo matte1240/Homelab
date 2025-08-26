@@ -1,0 +1,3 @@
+# meta-data
+instance-id: ubuntu-server-noble-template
+local-hostname: ubuntu-server-noble

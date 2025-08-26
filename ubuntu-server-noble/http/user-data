@@ -1,0 +1,47 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US
+  keyboard:
+    layout: us
+  ssh:
+    install-server: true
+    allow-pw: true
+    disable_root: true
+    ssh_quiet_keygen: true
+    allow_public_ssh_keys: true
+  packages:
+    - qemu-guest-agent
+    - sudo
+    - curl
+    - wget
+    - openssh-server
+  storage:
+    layout:
+      name: direct
+    swap:
+      size: 0
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens18:
+          dhcp4: true
+  user-data:
+    package_upgrade: false
+    timezone: Europe/Rome
+    users:
+      - name: ubuntu
+        groups: [adm, sudo]
+        lock-passwd: false
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        passwd: "$6$rounds=4096$8bSfvMhKPi$qfm3Q4c8mIE3B0.VhxNh/O1LlOKS9bEyqOl1YPjWR4fTv6S7Z9nY.8vQ5yBvN2kQqF3tJ6zE7P5xB9mS6dF8w1"
+        ssh_authorized_keys:
+          - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCa7rARd0MiXcM+/FFMk3hpNlThZ/xvc8oYroWQdL49SwASpA8gKtZTjfZDE8tTb3zd34gdmA28Hc6SEe/k8kdbLEqCtQi5G5BgOFzNUFW/RuxzGhUG13i3aBUyCw9RL24ZvtSg/g5cJNu2JVjhOQfT3SLkU5SoIcnjZ0ZwZcqA9LiKzraSL3M49sbR00ETdVQ0ddvAUtpzxvSPiFDQ0tOvU8omBc+YfZhnDs1zU2l2uMms/nVzOhPxpAupWz2dkGhLNAEJyOpFm2bclP0FzUoQYbe6lsFpeR3Qg6G6RlJI1wEAcpPcORN8w/miGiMNZdTMkC7OZ6dPDVwr7gEx5Q2DjKOC8EphAGL0YPHhpfd+0Y/qc26vhD1GG6AtishxnMNfIJ4MbqEMFLwcCgjpRKr5lqNqOlygRZnugZ3gPQuPtLuQz+YWvZiys1AeKDmeToira8NluXLpGyaJEYVcAK9PSflpNfLL+/Nhuc+6WnZVKyQswVeI/qfWGL9II9ql9IjYnOJk2WLxFG3TYZTEIneLj1yT+fZjDwDWh3JrgJwvfkwAxOUEEK0bGZ/nWmKYkgUOoTAw4MZNJ26YjmNl7K1Hin8v7VzrMnZfysv/CmrcBXGe8FLHSJuwBPrn2uzRbA4nSnG7t9rTbwfEqz3LafDdCI4LC4vOnAvQSrBgiFoYfQ== ubuntu@packer-build
+  late-commands:
+    - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu
+    - curtin in-target --target=/target -- chmod 440 /etc/sudoers.d/ubuntu
+    - curtin in-target --target=/target -- apt-get update
+    - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
