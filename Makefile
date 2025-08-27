@@ -39,7 +39,6 @@ help:
 	@echo "  $(GREEN)build-debian-trixie$(NC)     - Costruisce template Debian Trixie"
 	@echo ""
 	@echo "$(YELLOW)Utilità:$(NC)"
-	@echo "  $(GREEN)debug-ssh$(NC)               - Esegue debug della configurazione SSH"
 	@echo "  $(GREEN)show-ips$(NC)                - Mostra configurazione IP"
 	@echo ""
 	@echo "$(YELLOW)Esempi:$(NC)"
@@ -73,13 +72,6 @@ check:
 		echo "$(YELLOW)Esegui: ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa$(NC)"; \
 		exit 1; \
 	fi
-	@./debug-ssh.sh
-
-# Debug SSH
-.PHONY: debug-ssh
-debug-ssh:
-	@echo "$(BLUE)=== Debug SSH Configuration ===$(NC)"
-	@./debug-ssh.sh
 
 # Mostra configurazione IP
 .PHONY: show-ips
