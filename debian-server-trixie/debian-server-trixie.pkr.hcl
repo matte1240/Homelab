@@ -84,26 +84,20 @@ source "proxmox-iso" "debian-server-trixie" {
     boot_wait    = "10s"
     communicator = "ssh"
     boot_command = [
-      "<wait><esc><wait>",
-      "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
-      "hostname=debian-template ",
-      "domain=local ",
-      "interface=auto ",
-      "vga=788 noprompt quiet --<enter>"
+      "<wait><esc><wait>auto preseed/url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg netcfg/get_hostname=debian-template<enter>"
     ]
     http_directory          = "http"
     http_port_min           = 8802
     http_port_max           = 8802
-
+    http_bind_address       = "192.168.178.77"
     ssh_username            = "debian"
-    ssh_private_key_file    = "~/.ssh/id_rsa"
+    ssh_password            = "debian"
     ssh_timeout             = "45m"
     ssh_pty                 = true
     ssh_handshake_attempts  = "100"
     ssh_keep_alive_interval = "5s"
     ssh_port                = 22
     ssh_wait_timeout        = "45m"
-    ssh_clear_authorized_keys = false
 }
 
 build {

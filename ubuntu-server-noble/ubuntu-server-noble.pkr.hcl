@@ -107,17 +107,17 @@ source "proxmox-iso" "ubuntu-server-noble" {
     http_directory          = "http"
 
     # (Optional) Bind IP Address and Port
-    http_bind_address       = "192.168.178.70"
+    http_bind_address       = "192.168.178.77"
     http_port_min           = 8802
     http_port_max           = 8802
 
     ssh_username            = "ubuntu"
 
     # (Option 1) Add your Password here
-    # ssh_password        = "your-password"
+    ssh_password            = "ubuntu"
     # - or -
     # (Option 2) Add your Private SSH KEY file here
-    # ssh_private_key_file    = "~/.ssh/id_rsa"
+    ssh_private_key_file    = "~/.ssh/id_rsa"
 
     # Raise the timeout, when installation takes longer
     ssh_timeout             = "30m"
