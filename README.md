@@ -25,8 +25,8 @@ Template Packer per creare un template Ubuntu Server 24.04 LTS (Noble) ottimizza
 
 3. **Configura le credenziali Proxmox** (se non già fatto):
    ```bash
-   cp credentials.pkr.hcl.example credentials.pkr.hcl
-   nano credentials.pkr.hcl
+   cp packer/credentials.pkr.hcl.example packer/credentials.pkr.hcl
+   nano packer/credentials.pkr.hcl
    ```
 
 4. **Genera chiavi SSH** (se non già fatto):
