@@ -37,10 +37,12 @@ source "proxmox-iso" "ubuntu-server-noble" {
     vm_name              = "ubuntu-server-noble-template"
     template_description = "Ubuntu Server Noble 24.04 Template"
     boot_iso {
-        type         = "scsi"
-        iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
-        unmount      = true
-        iso_checksum = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
+        type             = "scsi"
+        iso_url          = "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
+        iso_storage_pool = "local"
+        iso_download_pve = true
+        unmount          = true
+        iso_checksum     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
     }
 
     qemu_agent = true
@@ -64,6 +66,19 @@ source "proxmox-iso" "ubuntu-server-noble" {
 
     cloud_init              = true
     cloud_init_storage_pool = "${local.disk_storage}"
+
+    // Example of additional ISO files that can be downloaded directly to Proxmox
+    // Uncomment to add tools or drivers during installation
+    /*
+    additional_iso_files {
+        type             = "ide"
+        iso_url          = "https://example.com/tools.iso"
+        iso_storage_pool = "local"
+        iso_download_pve = true
+        unmount          = true
+        iso_checksum     = "sha256:your_checksum_here"
+    }
+    */
 
     boot         = "c"
     boot_wait    = "10s"
