@@ -1,3 +1,8 @@
+# Ubuntu Server Noble (24.04.x)
+# ---
+# Packer Template to create an Ubuntu Server (Noble 24.04.x) on Proxmox
+
+# Variable Definitions
 variable "proxmox_api_url" {
     type = string
 }
@@ -11,39 +16,50 @@ variable "proxmox_password" {
     sensitive = true
 }
 
-variable "name" {
-    type    = string
-    default = "ubuntu-server-noble"
-}
-
-variable "version" {
-    type    = string
-    default = "24.04"
-}
-
 locals {
     disk_storage = "data"
 }
 
+# Resource Definiation for the VM Template
 source "proxmox-iso" "ubuntu-server-noble" {
+
+    # Proxmox Connection Settings
     proxmox_url = "${var.proxmox_api_url}"
     username    = "${var.proxmox_username}"
     password    = "${var.proxmox_password}"
+    # (Optional) Skip TLS Verification
     insecure_skip_tls_verify = true
+    
+    # Connection timeouts
     task_timeout = "10m"
 
+    # VM General Settings
     node                 = "pve"
-    vm_id                = "901"
+    vm_id                = "900"
     vm_name              = "ubuntu-server-noble-template"
     template_description = "Ubuntu Server Noble 24.04 Template"
+
+    # VM OS Settings
+    # (Option 1) Local ISO File - Utilizzare se hai già caricato l'ISO su Proxmox
     boot_iso {
         type         = "scsi"
         iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
         unmount      = true
         iso_checksum = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
     }
+    # (Option 2) Download ISO - Commentato per evitare problemi di upload
+    # boot_iso {
+    #     type             = "scsi"
+    #     iso_url          = "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
+    #     unmount          = true
+    #     iso_storage_pool = "local"
+    #     iso_checksum     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
+    # }
 
+    # VM System Settings
     qemu_agent = true
+
+    # VM Hard Disk Settings
     scsi_controller = "virtio-scsi-pci"
 
     disks {
@@ -53,58 +69,71 @@ source "proxmox-iso" "ubuntu-server-noble" {
         type              = "virtio"
     }
 
-    cores = "4"
-    memory = "4096"
+    # VM CPU Settings
+    cores = "1"
 
+    # VM Memory Settings
+    memory = "2048"
+
+    # VM Network Settings
     network_adapters {
         model    = "virtio"
         bridge   = "vmbr0"
         firewall = "false"
     }
 
+    # VM Cloud-Init Settings
     cloud_init              = true
     cloud_init_storage_pool = "${local.disk_storage}"
 
+    # PACKER Boot Commands
     boot         = "c"
     boot_wait    = "10s"
     communicator = "ssh"
     boot_command = [
-      "c<wait>linux /casper/vmlinuz --- autoinstall ds=\"nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/\"<enter><wait>",
-      "initrd /casper/initrd<enter><wait>",
-      "boot<enter><wait>"
+        "<esc><wait>",
+        "e<wait>",
+        "<down><down><down><end>",
+        "<bs><bs><bs><bs><wait>",
+        "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
+        "<f10><wait>"
     ]
+    # Useful for debugging
+    # Sometimes lag will require this
+    # boot_key_interval = "500ms"
+
+
+    # PACKER Autoinstall Settings
     http_directory          = "http"
+
+    # (Optional) Bind IP Address and Port
+    http_bind_address       = "192.168.178.77"
     http_port_min           = 8802
     http_port_max           = 8802
 
     ssh_username            = "ubuntu"
+
+    # (Option 1) Add your Password here
+    ssh_password            = "ubuntu"
+    # - or -
+    # (Option 2) Add your Private SSH KEY file here
     ssh_private_key_file    = "~/.ssh/id_rsa"
-    ssh_timeout             = "45m"
+
+    # Raise the timeout, when installation takes longer
+    ssh_timeout             = "30m"
     ssh_pty                 = true
-    ssh_handshake_attempts  = "100"
-    ssh_keep_alive_interval = "5s"
-    ssh_port                = 22
-    ssh_wait_timeout        = "45m"
-    ssh_clear_authorized_keys = false
 }
 
+# Build Definition to create the VM Template
 build {
+
     name    = "ubuntu-server-noble"
     sources = ["source.proxmox-iso.ubuntu-server-noble"]
 
+    # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
     provisioner "shell" {
         inline = [
-            "echo 'Connected via SSH successfully!'",
-            "echo 'Waiting for system to be fully ready...'",
-            "sleep 30",
-            "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 5; done",
-            "echo 'Ensuring SSH service is running...'",
-            "sudo systemctl is-active --quiet ssh || sudo systemctl restart ssh",
-            "sudo systemctl enable ssh",
-            "echo 'Ensuring qemu-guest-agent is running...'", 
-            "sudo systemctl is-active --quiet qemu-guest-agent || sudo systemctl restart qemu-guest-agent",
-            "sudo systemctl enable qemu-guest-agent",
-            "echo 'System is ready, proceeding with cleanup...'",
+            "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 1; done",
             "sudo rm /etc/ssh/ssh_host_*",
             "sudo truncate -s 0 /etc/machine-id",
             "sudo apt -y autoremove --purge",
@@ -117,12 +146,17 @@ build {
         ]
     }
 
+    # Provisioning the VM Template for Cloud-Init Integration in Proxmox #2
     provisioner "file" {
         source      = "files/99-pve.cfg"
         destination = "/tmp/99-pve.cfg"
     }
 
+    # Provisioning the VM Template for Cloud-Init Integration in Proxmox #3
     provisioner "shell" {
-        inline = ["sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg"]
+        inline = [ "sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg" ]
     }
+
+    # Add additional provisioning scripts here
+    # ...
 }

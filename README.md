@@ -18,36 +18,65 @@ Template Packer per creare un template Ubuntu Server 24.04 LTS (Noble) ottimizza
    cd Homelab
    ```
 
-2. **Configura le credenziali Proxmox**:
+2. **Verifica prerequisiti e configurazione**:
+   ```bash
+   make check
+   ```
+
+3. **Configura le credenziali Proxmox** (se non già fatto):
    ```bash
    cp credentials.pkr.hcl.example credentials.pkr.hcl
    nano credentials.pkr.hcl
    ```
 
-3. **Genera chiavi SSH**:
+4. **Genera chiavi SSH** (se non già fatto):
    ```bash
    ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "" -C "ubuntu@packer-build"
    ```
 
-4. **Aggiorna la chiave pubblica nel file user-data**:
+5. **Costruisci i template**:
    ```bash
-   cat ~/.ssh/id_rsa.pub
-   # Copia la chiave nel file ubuntu-server-noble/http/user-data
+   # Tutti i template
+   make build-all
+   
+   # Solo Ubuntu
+   make build-ubuntu
+   
+   # Solo Debian Trixie
+   make build-debian-trixie
    ```
 
-5. **Build del template**:
+6. **Mostra aiuto completo**:
    ```bash
-   cd ubuntu-server-noble
-   packer validate -var-file="../credentials.pkr.hcl" ubuntu-server-noble.pkr.hcl
-   packer build -var-file="../credentials.pkr.hcl" ubuntu-server-noble.pkr.hcl
+   make help
    ```
 
 ## 📋 Prerequisiti
 
 - **Proxmox VE** 7.0 o superiore
 - **Packer** 1.8 o superiore
-- **ISO Ubuntu Server 24.04.3** caricata su Proxmox storage `local`
+- **Plugin Proxmox** v1.2.3+ (con supporto `iso_download_pve`)
 - **Credenziali API** Proxmox configurate
+
+## 🆕 Nuove Funzionalità
+
+### 📥 Download Automatico ISO (v1.1.7+)
+Il template ora supporta il **download automatico delle ISO direttamente sul nodo Proxmox**, eliminando la necessità di upload manuale:
+
+```hcl
+boot_iso {
+    iso_url          = "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
+    iso_storage_pool = "local"
+    iso_download_pve = true        # 🔑 Download automatico!
+}
+```
+
+**Vantaggi**:
+- ⚡ **Build più veloci** - nessun upload da Packer a Proxmox
+- 🌐 **Efficienza di rete** - download diretto sul nodo
+- 🔄 **Automazione completa** - nessuna gestione manuale ISO
+
+📖 **Documentazione completa**: [ISO_DOWNLOAD.md](ubuntu-server-noble/ISO_DOWNLOAD.md)
 
 ## ⚙️ Configurazione
 
