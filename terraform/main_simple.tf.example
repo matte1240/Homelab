@@ -1,0 +1,55 @@
+# Alternative simple configuration without disk resizing
+# Use this if you want to keep the template's exact disk configuration
+
+resource "proxmox_vm_qemu" "debian_vm_simple" {
+  name        = var.vm_name
+  target_node = var.proxmox_node
+  vmid        = var.vm_id
+  
+  # VM specs  
+  cpu {
+    cores   = var.vm_cores
+    sockets = 1
+  }
+  memory = var.vm_memory
+  
+  # VM template and cloning configuration
+  clone      = var.template_name
+  full_clone = true
+  
+  # Boot configuration - ensures proper boot order
+  boot    = "order=scsi0;ide2"
+  bootdisk = "scsi0"
+  
+  # Network configuration
+  network {
+    id     = 0
+    model  = "virtio"
+    bridge = var.network_bridge
+  }
+  
+  # Cloud-init configuration
+  ciuser       = var.ci_user
+  cipassword   = var.ci_password
+  sshkeys      = var.ssh_keys
+  searchdomain = var.search_domain
+  nameserver   = var.nameserver
+  
+  # IP configuration (optional - use DHCP if not specified)
+  ipconfig0 = var.ip_config != null ? "${var.ip_config.ip},gw=${var.ip_config.gateway}" : "dhcp"
+  
+  # OS type
+  os_type = "cloud-init"
+  
+  # Agent
+  agent = 1
+  
+  # Start VM after creation
+  automatic_reboot = false
+  
+  lifecycle {
+    ignore_changes = [
+      network,
+    ]
+  }
+}
