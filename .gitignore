@@ -1,5 +1,5 @@
 # Proxmox credentials
-credentials.pkr.hcl
+packer/credentials.pkr.hcl
 
 # SSH keys
 *.pem

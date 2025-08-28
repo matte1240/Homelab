@@ -1,9 +1,12 @@
-# Makefile per la creazione automatica dei template VM Proxmox
-# Usa: make <target> per eseguire le operazioni
+# Makefile per la creazione automatica dei template VM Proxmox	@else \
+		echo "$(RED)✗ File $(CREDENTIALS) non trovato$(NC)"; \
+		echo "$(YELLOW)Esegui: cp $(PACKER_DIR)/credentials.pkr.hcl.example $(CREDENTIALS)$(NC)"; \
+		exit 1; \sa: make <target> per eseguire le operazioni
 
 # Variabili di configurazione
 PACKER := packer
-CREDENTIALS := credentials.pkr.hcl
+PACKER_DIR := packer
+CREDENTIALS := $(PACKER_DIR)/credentials.pkr.hcl
 PACKER_LOG_LEVEL := 1
 
 # Colori per output
@@ -14,8 +17,8 @@ BLUE := \033[0;34m
 NC := \033[0m # No Color
 
 # Template disponibili
-UBUNTU_TEMPLATE := ubuntu-server-noble
-DEBIAN_TRIXIE_TEMPLATE := debian-server-trixie
+UBUNTU_TEMPLATE := $(PACKER_DIR)/ubuntu-server-noble
+DEBIAN_TRIXIE_TEMPLATE := $(PACKER_DIR)/debian-server-trixie
 
 # Target predefinito
 .DEFAULT_GOAL := help
@@ -78,21 +81,21 @@ check:
 show-ips:
 	@echo "$(BLUE)=== Configurazione IP ===$(NC)"
 	@echo "$(YELLOW)IP di sistema:$(NC) $(shell ip route get 1.1.1.1 | grep -oP 'src \K\S+')"
-	@echo "$(YELLOW)Ubuntu template:$(NC) $(shell grep http_bind_address $(UBUNTU_TEMPLATE)/$(UBUNTU_TEMPLATE).pkr.hcl | grep -oP '"\K[^"]+')"
-	@if [ -f "$(DEBIAN_TRIXIE_TEMPLATE)/$(DEBIAN_TRIXIE_TEMPLATE).pkr.hcl" ]; then \
-		echo "$(YELLOW)Debian Trixie:$(NC) $(shell grep http_bind_address $(DEBIAN_TRIXIE_TEMPLATE)/$(DEBIAN_TRIXIE_TEMPLATE).pkr.hcl | grep -oP '"\K[^"]+')"; \
+	@echo "$(YELLOW)Ubuntu template:$(NC) $(shell grep http_bind_address $(UBUNTU_TEMPLATE)/ubuntu-server-noble.pkr.hcl | grep -oP '"\K[^"]+')"
+	@if [ -f "$(DEBIAN_TRIXIE_TEMPLATE)/debian-server-trixie.pkr.hcl" ]; then \
+		echo "$(YELLOW)Debian Trixie:$(NC) $(shell grep http_bind_address $(DEBIAN_TRIXIE_TEMPLATE)/debian-server-trixie.pkr.hcl | grep -oP '"\K[^"]+')"; \
 	fi
 
 # Validazione template
 .PHONY: validate-ubuntu
 validate-ubuntu:
 	@echo "$(BLUE)=== Validazione Template Ubuntu ===$(NC)"
-	cd $(UBUNTU_TEMPLATE) && $(PACKER) validate -var-file="../$(CREDENTIALS)" $(UBUNTU_TEMPLATE).pkr.hcl
+	cd $(UBUNTU_TEMPLATE) && $(PACKER) validate -var-file="../credentials.pkr.hcl" ubuntu-server-noble.pkr.hcl
 
 .PHONY: validate-debian-trixie
 validate-debian-trixie:
 	@echo "$(BLUE)=== Validazione Template Debian Trixie ===$(NC)"
-	cd $(DEBIAN_TRIXIE_TEMPLATE) && $(PACKER) validate -var-file="../$(CREDENTIALS)" $(DEBIAN_TRIXIE_TEMPLATE).pkr.hcl
+	cd $(DEBIAN_TRIXIE_TEMPLATE) && $(PACKER) validate -var-file="../credentials.pkr.hcl" debian-server-trixie.pkr.hcl
 
 .PHONY: validate-all
 validate-all: validate-ubuntu validate-debian-trixie
@@ -102,12 +105,12 @@ validate-all: validate-ubuntu validate-debian-trixie
 .PHONY: build-ubuntu
 build-ubuntu: validate-ubuntu
 	@echo "$(BLUE)=== Build Template Ubuntu Noble ===$(NC)"
-	cd $(UBUNTU_TEMPLATE) && PACKER_LOG=$(PACKER_LOG_LEVEL) $(PACKER) build -var-file="../$(CREDENTIALS)" $(UBUNTU_TEMPLATE).pkr.hcl
+	cd $(UBUNTU_TEMPLATE) && PACKER_LOG=$(PACKER_LOG_LEVEL) $(PACKER) build -var-file="../credentials.pkr.hcl" ubuntu-server-noble.pkr.hcl
 
 .PHONY: build-debian-trixie
 build-debian-trixie: validate-debian-trixie
 	@echo "$(BLUE)=== Build Template Debian Trixie ===$(NC)"
-	cd $(DEBIAN_TRIXIE_TEMPLATE) && PACKER_LOG=$(PACKER_LOG_LEVEL) $(PACKER) build -var-file="../$(CREDENTIALS)" $(DEBIAN_TRIXIE_TEMPLATE).pkr.hcl
+	cd $(DEBIAN_TRIXIE_TEMPLATE) && PACKER_LOG=$(PACKER_LOG_LEVEL) $(PACKER) build -var-file="../credentials.pkr.hcl" debian-server-trixie.pkr.hcl
 
 .PHONY: build-all
 build-all: check
