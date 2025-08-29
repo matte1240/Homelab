@@ -26,3 +26,16 @@ packer_cache/
 .directory
 .Trash-*
 .nfs*
+
+# Terraform files
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfplan
+terraform/*.tfplan.*
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/*auto.tfvars
+terraform/*.auto.tfvars.json
+terraform/.terraformrc
+terraform/terraform.rc
