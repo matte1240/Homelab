@@ -19,8 +19,8 @@ network_bridge = "vmbr0"
 # Cloud-init configuration
 ci_user       = "debian"
 ci_password   = "debian"   # Password temporanea, usa SSH keys
-search_domain = "fritz.box"
-nameserver    = "192.168.178.1"
+search_domain = "lan"
+
 
 # SSH keys (la tua chiave pubblica esistente)
 ssh_keys = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCa7rARd0MiXcM+/FFMk3hpNlThZ/xvc8oYroWQdL49SwASpA8gKtZTjfZDE8tTb3zd34gdmA28Hc6SEe/k8kdbLEqCtQi5G5BgOFzNUFW/RuxzGhUG13i3aBUyCw9RL24ZvtSg/g5cJNu2JVjhOQfT3SLkU5SoIcnjZ0ZwZcqA9LiKzraSL3M49sbR00ETdVQ0ddvAUtpzxvSPiFDQ0tOvU8omBc+YfZhnDs1zU2l2uMms/nVzOhPxpAupWz2dkGhLNAEJyOpFm2bclP0FzUoQYbe6lsFpeR3Qg6G6RlJI1wEAcpPcORN8w/miGiMNZdTMkC7OZ6dPDVwr7gEx5Q2DjKOC8EphAGL0YPHhpfd+0Y/qc26vhD1GG6AtishxnMNfIJ4MbqEMFLwcCgjpRKr5lqNqOlygRZnugZ3gPQuPtLuQz+YWvZiys1AeKDmeToira8NluXLpGyaJEYVcAK9PSflpNfLL+/Nhuc+6WnZVKyQswVeI/qfWGL9II9ql9IjYnOJk2WLxFG3TYZTEIneLj1yT+fZjDwDWh3JrgJwvfkwAxOUEEK0bGZ/nWmKYkgUOoTAw4MZNJ26YjmNl7K1Hin8v7VzrMnZfysv/CmrcBXGe8FLHSJuwBPrn2uzRbA4nSnG7t9rTbwfEqz3LafDdCI4LC4vOnAvQSrBgiFoYfQ== ubuntu@packer-build"
@@ -37,8 +37,8 @@ packages = [
   "unzip"
 ]
 
-# Configurazione IP statica (opzionale - rimuovi commento e adatta)
-# ip_config = {
-#   ip      = "192.168.178.100/24"  # Adatta alla tua rete (vedi http_bind_address nel Packer)
-#   gateway = "192.168.178.1"
-# }
+# Configurazione IP statica per VM Debian
+ip_config = {
+  ip      = "192.168.178.21/24"
+  gateway = "192.168.178.1"
+}
