@@ -58,7 +58,7 @@ resource "proxmox_virtual_environment_vm" "debian_vm" {
     }
     
     dns {
-      servers = [var.nameserver]
+      servers = var.dns_servers
       domain  = var.search_domain
     }
     
@@ -113,7 +113,7 @@ resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
     }
     
     dns {
-      servers = [var.nameserver]
+      servers = var.dns_servers
       domain  = var.search_domain
     }
     

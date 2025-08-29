@@ -96,10 +96,10 @@ variable "search_domain" {
   default     = "local"
 }
 
-variable "nameserver" {
-  description = "DNS nameserver"
-  type        = string
-  default     = "8.8.8.8"
+variable "dns_servers" {
+  description = "List of DNS servers"
+  type        = list(string)
+  default     = ["192.168.178.2", "192.168.178.3", "1.1.1.1"]
 }
 
 variable "ip_config" {
