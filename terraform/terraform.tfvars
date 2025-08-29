@@ -19,7 +19,7 @@ network_bridge = "vmbr0"
 # Cloud-init configuration
 ci_user       = "debian"
 ci_password   = "debian"   # Password temporanea, usa SSH keys
-search_domain = "fritz.box"
+search_domain = "lan"
 nameserver    = "192.168.178.1"
 
 # SSH keys (la tua chiave pubblica esistente)
@@ -37,8 +37,8 @@ packages = [
   "unzip"
 ]
 
-# Configurazione IP statica (opzionale - rimuovi commento e adatta)
-# ip_config = {
-#   ip      = "192.168.178.100/24"  # Adatta alla tua rete (vedi http_bind_address nel Packer)
-#   gateway = "192.168.178.1"
-# }
+# Configurazione IP statica per VM Debian
+ip_config = {
+  ip      = "192.168.178.21/24"
+  gateway = "192.168.178.1"
+}
