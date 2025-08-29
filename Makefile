@@ -1,11 +1,11 @@
-# Makefile per la creazione automatica dei template VM Proxmox	@else \
-		echo "$(RED)✗ File $(CREDENTIALS) non trovato$(NC)"; \
-		echo "$(YELLOW)Esegui: cp $(PACKER_DIR)/credentials.pkr.hcl.example $(CREDENTIALS)$(NC)"; \
-		exit 1; \sa: make <target> per eseguire le operazioni
+# Makefile per la gestione dell'homelab Proxmox
+# Uso: make <target> per eseguire le operazioni
 
 # Variabili di configurazione
 PACKER := packer
+TERRAFORM := terraform
 PACKER_DIR := packer
+TERRAFORM_DIR := terraform
 CREDENTIALS := $(PACKER_DIR)/credentials.pkr.hcl
 PACKER_LOG_LEVEL := 1
 
@@ -26,27 +26,40 @@ DEBIAN_TRIXIE_TEMPLATE := $(PACKER_DIR)/debian-server-trixie
 # Aiuto
 .PHONY: help
 help:
-	@echo "$(BLUE)=== Makefile per Template VM Proxmox ===$(NC)"
+	@echo "$(BLUE)=== Makefile Homelab Proxmox ===$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Target disponibili:$(NC)"
+	@echo "$(YELLOW)Target principali:$(NC)"
 	@echo "  $(GREEN)help$(NC)                    - Mostra questo aiuto"
 	@echo "  $(GREEN)check$(NC)                   - Verifica prerequisiti e configurazione"
+	@echo "  $(GREEN)clean$(NC)                   - Pulisce file temporanei e cache"
+	@echo "  $(GREEN)clean-all$(NC)               - Pulizia completa (include terraform)"
+	@echo ""
+	@echo "$(YELLOW)Packer Templates:$(NC)"
 	@echo "  $(GREEN)validate-all$(NC)            - Valida tutti i template"
 	@echo "  $(GREEN)build-all$(NC)               - Costruisce tutti i template"
-	@echo "  $(GREEN)clean$(NC)                   - Pulisce i file temporanei"
-	@echo ""
-	@echo "$(YELLOW)Template specifici:$(NC)"
 	@echo "  $(GREEN)validate-ubuntu$(NC)         - Valida template Ubuntu Noble"
 	@echo "  $(GREEN)build-ubuntu$(NC)            - Costruisce template Ubuntu Noble"
 	@echo "  $(GREEN)validate-debian-trixie$(NC)  - Valida template Debian Trixie"
 	@echo "  $(GREEN)build-debian-trixie$(NC)     - Costruisce template Debian Trixie"
 	@echo ""
+	@echo "$(YELLOW)Terraform Infrastructure:$(NC)"
+	@echo "  $(GREEN)terraform-init$(NC)          - Inizializza Terraform"
+	@echo "  $(GREEN)terraform-plan$(NC)          - Mostra plan Terraform"
+	@echo "  $(GREEN)terraform-apply$(NC)         - Applica configurazione"
+	@echo "  $(GREEN)terraform-destroy$(NC)       - Distrugge infrastruttura"
+	@echo "  $(GREEN)terraform-status$(NC)        - Mostra stato infrastruttura"
+	@echo "  $(GREEN)terraform-validate$(NC)      - Valida configurazione Terraform"
+	@echo "  $(GREEN)terraform-fmt$(NC)           - Formatta file Terraform"
+	@echo "  $(GREEN)clean-terraform$(NC)         - Pulisce solo file Terraform"
+	@echo ""
 	@echo "$(YELLOW)Utilità:$(NC)"
 	@echo "  $(GREEN)show-ips$(NC)                - Mostra configurazione IP"
+	@echo "  $(GREEN)dev-check$(NC)               - Controlli di sviluppo"
 	@echo ""
 	@echo "$(YELLOW)Esempi:$(NC)"
-	@echo "  make check                    # Verifica tutto prima di iniziare"
+	@echo "  make check                    # Verifica prerequisiti"
 	@echo "  make build-ubuntu             # Costruisce solo Ubuntu"
+	@echo "  make terraform-plan           # Mostra piano terraform"
 	@echo "  PACKER_LOG=1 make build-all  # Build con log dettagliati"
 
 # Verifica prerequisiti
@@ -59,12 +72,18 @@ check:
 	else \
 		echo "$(RED)✗ Packer non trovato$(NC)"; exit 1; \
 	fi
+	@echo -n "$(YELLOW)Checking Terraform...$(NC) "
+	@if command -v $(TERRAFORM) >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ $(shell $(TERRAFORM) version | head -n1)$(NC)"; \
+	else \
+		echo "$(RED)✗ Terraform non trovato$(NC)"; exit 1; \
+	fi
 	@echo -n "$(YELLOW)Checking credentials...$(NC) "
 	@if [ -f "$(CREDENTIALS)" ]; then \
 		echo "$(GREEN)✓ File credenziali trovato$(NC)"; \
 	else \
 		echo "$(RED)✗ File $(CREDENTIALS) non trovato$(NC)"; \
-		echo "$(YELLOW)Esegui: cp credentials.pkr.hcl.example credentials.pkr.hcl$(NC)"; \
+		echo "$(YELLOW)Esegui: cp $(PACKER_DIR)/credentials.pkr.hcl.example $(CREDENTIALS)$(NC)"; \
 		exit 1; \
 	fi
 	@echo -n "$(YELLOW)Checking SSH keys...$(NC) "
@@ -124,14 +143,105 @@ build-all: check
 	@echo ""
 	@echo "$(GREEN)=== Tutti i template completati con successo! ===$(NC)"
 
-# Pulizia
+# ================================================
+# TERRAFORM TARGETS
+# ================================================
+
+# Inizializzazione Terraform
+.PHONY: terraform-init
+terraform-init:
+	@echo "$(BLUE)=== Inizializzazione Terraform ===$(NC)"
+	cd $(TERRAFORM_DIR) && $(TERRAFORM) init
+
+# Plan Terraform
+.PHONY: terraform-plan
+terraform-plan:
+	@echo "$(BLUE)=== Terraform Plan ===$(NC)"
+	cd $(TERRAFORM_DIR) && $(TERRAFORM) plan
+
+# Apply Terraform
+.PHONY: terraform-apply
+terraform-apply:
+	@echo "$(BLUE)=== Terraform Apply ===$(NC)"
+	@echo "$(YELLOW)Attenzione: Questa operazione modificherà l'infrastruttura!$(NC)"
+	@read -p "Confermi l'applicazione? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(TERRAFORM_DIR) && $(TERRAFORM) apply; \
+	else \
+		echo "$(YELLOW)Operazione annullata$(NC)"; \
+	fi
+
+# Destroy Terraform
+.PHONY: terraform-destroy
+terraform-destroy:
+	@echo "$(BLUE)=== Terraform Destroy ===$(NC)"
+	@echo "$(RED)ATTENZIONE: Questa operazione distruggerà l'intera infrastruttura!$(NC)"
+	@read -p "Sei SICURO di voler continuare? (type 'yes' to confirm): " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		cd $(TERRAFORM_DIR) && $(TERRAFORM) destroy; \
+	else \
+		echo "$(YELLOW)Operazione annullata$(NC)"; \
+	fi
+
+# Status Terraform
+.PHONY: terraform-status
+terraform-status:
+	@echo "$(BLUE)=== Stato Terraform ===$(NC)"
+	@echo "$(YELLOW)Workspace corrente:$(NC)"
+	@cd $(TERRAFORM_DIR) && $(TERRAFORM) workspace show 2>/dev/null || echo "default"
+	@echo ""
+	@echo "$(YELLOW)Stato delle risorse:$(NC)"
+	@cd $(TERRAFORM_DIR) && $(TERRAFORM) state list 2>/dev/null || echo "Nessuna risorsa trovata o terraform non inizializzato"
+
+# Validazione Terraform
+.PHONY: terraform-validate
+terraform-validate:
+	@echo "$(BLUE)=== Validazione Terraform ===$(NC)"
+	cd $(TERRAFORM_DIR) && $(TERRAFORM) validate
+
+# Format Terraform
+.PHONY: terraform-fmt
+terraform-fmt:
+	@echo "$(BLUE)=== Format Terraform ===$(NC)"
+	cd $(TERRAFORM_DIR) && $(TERRAFORM) fmt -recursive
+
+# ================================================
+# PULIZIA
+# ================================================
+
+# Pulizia standard (file temporanei e cache)
 .PHONY: clean
 clean:
 	@echo "$(BLUE)=== Pulizia file temporanei ===$(NC)"
-	@find . -name "*.log" -type f -delete
+	@find . -name "*.log" -type f -delete 2>/dev/null || true
 	@find . -name "packer_cache" -type d -exec rm -rf {} + 2>/dev/null || true
 	@find . -name ".packer" -type d -exec rm -rf {} + 2>/dev/null || true
-	@echo "$(GREEN)Pulizia completata$(NC)"
+	@echo "$(GREEN)Pulizia standard completata$(NC)"
+
+# Pulizia completa (include file terraform e cache)
+.PHONY: clean-all
+clean-all: clean
+	@echo "$(BLUE)=== Pulizia completa ===$(NC)"
+	@echo "$(YELLOW)Rimuovo file terraform temporanei...$(NC)"
+	@find $(TERRAFORM_DIR) -name ".terraform" -type d -exec rm -rf {} + 2>/dev/null || true
+	@find $(TERRAFORM_DIR) -name ".terraform.lock.hcl" -type f -delete 2>/dev/null || true
+	@find $(TERRAFORM_DIR) -name "*.tfplan" -type f -delete 2>/dev/null || true
+	@find $(TERRAFORM_DIR) -name "crash.log" -type f -delete 2>/dev/null || true
+	@echo "$(GREEN)Pulizia completa terminata$(NC)"
+
+# Pulizia terraform (solo terraform, utile per re-init)
+.PHONY: clean-terraform
+clean-terraform:
+	@echo "$(BLUE)=== Pulizia Terraform ===$(NC)"
+	@echo "$(YELLOW)Attenzione: Questo rimuoverà .terraform/ e richiederà re-init$(NC)"
+	@read -p "Confermi la pulizia terraform? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		rm -rf $(TERRAFORM_DIR)/.terraform 2>/dev/null || true; \
+		rm -f $(TERRAFORM_DIR)/.terraform.lock.hcl 2>/dev/null || true; \
+		echo "$(GREEN)Pulizia terraform completata$(NC)"; \
+	else \
+		echo "$(YELLOW)Operazione annullata$(NC)"; \
+	fi
 
 # Build veloce (solo validazione + build senza check completo)
 .PHONY: quick-ubuntu quick-debian-trixie
