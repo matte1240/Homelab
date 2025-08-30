@@ -6,41 +6,31 @@ packer/credentials.pkr.hcl
 *.pub
 id_rsa*
 
-# Packer cache
+# Packer
 packer_cache/
 *.box
 
-# Temporary files
+# Temporary files and logs
 *.tmp
 *.log
+crash.log
 
-# VS Code
+# Editors / IDEs
 .vscode/
 
-# MacOS
+# OS files
 .DS_Store
 
-# Linux
+# Linux temporary/backups
 *~
 .fuse_hidden*
 .directory
 .Trash-*
 .nfs*
 
-# Terraform files
-.terraform/
-terraform.tfstate
-terraform.tfstate.*
+# Terraform - consolidated rules (applies to any terraform directory)
+# Ignore Terraform state, plans, lock and variable files
 *.tfstate
 *.tfstate.*
-*.tfplan
-*.tfplan.*
 .terraform.lock.hcl
 terraform.tfvars
-*auto.tfvars
-*.auto.tfvars.json
-.terraformrc
-terraform.rc
-
-# Terraform crash logs
-crash.log
