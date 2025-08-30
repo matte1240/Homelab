@@ -32,5 +32,6 @@ crash.log
 # Ignore Terraform state, plans, lock and variable files
 *.tfstate
 *.tfstate.*
+.terraform/
 .terraform.lock.hcl
 terraform.tfvars
