@@ -118,5 +118,11 @@ services:
       - {{ mount }}
 {% endfor %}
 {% endif %}
+{% if service.labels is defined %}
+    labels:
+{% for key, value in service.labels.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
 
 {% endfor %}
