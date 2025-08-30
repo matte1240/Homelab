@@ -33,5 +33,14 @@ terraform.tfstate
 terraform.tfstate.*
 *.tfstate
 *.tfstate.*
+*.tfplan
+*.tfplan.*
 .terraform.lock.hcl
 terraform.tfvars
+*auto.tfvars
+*.auto.tfvars.json
+.terraformrc
+terraform.rc
+
+# Terraform crash logs
+crash.log
