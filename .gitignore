@@ -9,6 +9,8 @@ id_rsa*
 # Packer
 packer_cache/
 *.box
+packer-manifest.json
+.packer/
 
 # Temporary files and logs
 *.tmp
@@ -32,9 +34,21 @@ crash.log
 # Ignore Terraform state, plans, lock and variable files
 *.tfstate
 *.tfstate.*
+*.tfstate.backup
 .terraform/
 .terraform.lock.hcl
 terraform.tfvars
+terraform.tfvars.json
+*.tfplan
+*.tfplan.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
 
 # Ansible - consolidated rules
 # Ansible vault and sensitive files
