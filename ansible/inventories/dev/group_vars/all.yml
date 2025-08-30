@@ -1,0 +1,32 @@
+---
+# Development Environment Configuration
+environment: dev
+compose_project_name: myapp_dev
+app_directory: /opt/myapp-dev
+network_subnet: "172.20.0.0/16"
+
+# Development resource settings
+compose_pull_policy: policy
+compose_recreate: auto
+
+# Example application configuration
+compose_services:
+  - name: web
+    image: "nginx:latest"
+    ports:
+      - "8080:80"
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - "{{ app_directory }}/html:/usr/share/nginx/html:ro"
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Environment variables for .env file
+compose_environment:
+  APP_ENV: development
+  DEBUG: "true"
+  LOG_LEVEL: debug

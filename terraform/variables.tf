@@ -147,3 +147,41 @@ variable "run_commands" {
     "systemctl start qemu-guest-agent"
   ]
 }
+
+# Ubuntu VM specific variables
+variable "ubuntu_vm_name" {
+  description = "Ubuntu VM name"
+  type        = string
+  default     = "ubuntu-vm-01"
+}
+
+variable "ubuntu_vm_id" {
+  description = "Ubuntu VM ID"
+  type        = number
+  default     = 302
+}
+
+variable "ubuntu_ip_config" {
+  description = "IP configuration for Ubuntu VM (optional - use DHCP if null)"
+  type = object({
+    ip      = string
+    gateway = string
+  })
+  default = {
+    ip      = "192.168.178.22/24"
+    gateway = "192.168.178.1"
+  }
+}
+
+# Template ID variables
+variable "debian_template_id" {
+  description = "VM ID of the Debian template"
+  type        = number
+  default     = 902
+}
+
+variable "ubuntu_template_id" {
+  description = "VM ID of the Ubuntu template"
+  type        = number
+  default     = 900
+}

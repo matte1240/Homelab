@@ -1,0 +1,27 @@
+---
+- name: Deploy Application with Docker Compose
+  hosts: docker_hosts
+  become: true
+  gather_facts: true
+  
+  roles:
+    - role: docker_compose
+      tags: [compose, deploy]
+
+  post_tasks:
+    - name: Wait for services to be ready
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Check service status
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_directory }}"
+        project_name: "{{ compose_project_name }}"
+        state: present
+      register: service_status
+      check_mode: true
+
+    - name: Display service status
+      ansible.builtin.debug:
+        msg: "Services running: {{ service_status.services.keys() | list }}"
+      when: service_status.services is defined

@@ -4,7 +4,7 @@ terraform {
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
-      version = "~> 0.66"
+      version = "~> 0.50"
     }
   }
 }
@@ -24,7 +24,7 @@ resource "proxmox_virtual_environment_vm" "debian_vm" {
   
   # Clone from template
   clone {
-    vm_id = 902  # VM ID del template debian-server-trixie-template
+    vm_id = var.debian_template_id
   }
   
   # Agent
@@ -73,13 +73,13 @@ resource "proxmox_virtual_environment_vm" "debian_vm" {
 
 # Create Ubuntu VM with cloud-init
 resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
-  name      = "ubuntu-vm-01"
+  name      = var.ubuntu_vm_name
   node_name = var.proxmox_node
-  vm_id     = 302
+  vm_id     = var.ubuntu_vm_id
   
   # Clone from Ubuntu template
   clone {
-    vm_id = 900  # VM ID del template ubuntu
+    vm_id = var.ubuntu_template_id
   }
   
   # Agent
@@ -119,8 +119,8 @@ resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
     
     ip_config {
       ipv4 {
-        address = "192.168.178.22/24"
-        gateway = "192.168.178.1"
+        address = var.ubuntu_ip_config != null ? var.ubuntu_ip_config.ip : "dhcp"
+        gateway = var.ubuntu_ip_config != null ? var.ubuntu_ip_config.gateway : null
       }
     }
   }

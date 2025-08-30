@@ -1,0 +1,17 @@
+---
+# Docker Compose defaults
+app_directory: /opt/app
+compose_project_name: myapp
+compose_pull_policy: policy
+compose_state: present
+compose_recreate: auto
+compose_wait_timeout: 300
+app_user: "{{ ansible_user }}"
+app_group: "{{ ansible_user }}"
+hide_sensitive_logs: true
+
+# Default compose services (override in vars)
+compose_services: []
+compose_volumes: []
+compose_secrets: []
+network_subnet: "172.20.0.0/16"
