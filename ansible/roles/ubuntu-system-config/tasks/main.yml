@@ -1,0 +1,14 @@
+---
+- name: Configure systemd-resolved for Pi-hole compatibility
+  lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNSStubListener='
+    line: 'DNSStubListener=no'
+    backup: yes
+  notify: restart systemd-resolved
+
+- name: Ensure systemd-resolved is running
+  systemd:
+    name: systemd-resolved
+    enabled: yes
+    state: started
