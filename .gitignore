@@ -35,3 +35,23 @@ crash.log
 .terraform/
 .terraform.lock.hcl
 terraform.tfvars
+
+# Ansible - consolidated rules
+# Ansible vault and sensitive files
+vault.yml
+vault_pass.txt
+*.vault
+
+# Ansible retry files and logs
+*.retry
+ansible.log
+
+# Ansible Galaxy collections and roles (if locally downloaded)
+collections/ansible_collections/
+roles/*/
+
+# Host-specific variables (may contain sensitive data)
+host_vars/*/vault.yml
+
+# Ansible temporary files
+.ansible/

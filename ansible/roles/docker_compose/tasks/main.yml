@@ -1,0 +1,95 @@
+---
+- name: Ensure application directory exists
+  ansible.builtin.file:
+    path: "{{ app_directory }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create html directory for web content
+  ansible.builtin.file:
+    path: "{{ app_directory }}/html"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create sample index.html
+  ansible.builtin.copy:
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>{{ compose_project_name }} - {{ environment | default('development') }}</title>
+          <style>
+              body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f4; }
+              .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+              h1 { color: #333; }
+              .status { background: #e8f5e8; padding: 15px; border-radius: 4px; margin: 20px 0; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>🚀 Docker Compose Deployment Successful!</h1>
+              <div class="status">
+                  <strong>Project:</strong> {{ compose_project_name }}<br>
+                  <strong>Environment:</strong> {{ environment | default('development') }}<br>
+                  <strong>Status:</strong> ✅ Running
+              </div>
+              <p>Your Ansible-deployed Docker Compose application is running successfully.</p>
+          </div>
+      </body>
+      </html>
+    dest: "{{ app_directory }}/html/index.html"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+
+- name: Create secrets directory
+  ansible.builtin.file:
+    path: "{{ app_directory }}/secrets"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0700'
+  when: compose_secrets | length > 0
+
+- name: Generate environment file
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ app_directory }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+  notify: restart compose services
+  no_log: "{{ hide_sensitive_logs }}"
+  when: compose_environment is defined
+
+- name: Generate docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_directory }}/docker-compose.yml"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+  notify: restart compose services
+
+- name: Create and start Docker Compose services
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_directory }}"
+    project_name: "{{ compose_project_name }}"
+    state: "{{ compose_state }}"
+    pull: "{{ compose_pull_policy }}"
+    recreate: "{{ compose_recreate }}"
+    remove_orphans: true
+    wait: true
+    wait_timeout: "{{ compose_wait_timeout }}"
+  register: compose_result
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: "Services deployed: {{ compose_result.services.keys() | list }}"
+  when: 
+    - compose_result is defined 
+    - compose_result.services is defined

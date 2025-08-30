@@ -1,0 +1,16 @@
+---
+# Docker installation defaults
+docker_users:
+  - "{{ ansible_user }}"
+
+docker_daemon_options:
+  storage-driver: "overlay2"
+  log-driver: "json-file"
+  log-opts:
+    max-size: "100m"
+    max-file: "3"
+  live-restore: true
+  userland-proxy: false
+  experimental: false
+
+docker_compose_version: "2.29.7"

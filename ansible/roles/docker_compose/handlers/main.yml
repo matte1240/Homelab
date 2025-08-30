@@ -1,0 +1,24 @@
+---
+- name: restart compose services
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_directory }}"
+    project_name: "{{ compose_project_name }}"
+    state: present
+    recreate: always
+    pull: policy
+  listen: "restart compose services"
+
+- name: stop compose services
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_directory }}"
+    project_name: "{{ compose_project_name }}"
+    state: stopped
+  listen: "stop compose services"
+
+- name: remove compose services
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_directory }}"
+    project_name: "{{ compose_project_name }}"
+    state: absent
+    remove_orphans: true
+  listen: "remove compose services"

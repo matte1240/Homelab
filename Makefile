@@ -4,8 +4,11 @@
 # Variabili di configurazione
 PACKER := packer
 TERRAFORM := terraform
+ANSIBLE := ansible
+ANSIBLE_PLAYBOOK := ansible-playbook
 PACKER_DIR := packer
 TERRAFORM_DIR := terraform
+ANSIBLE_DIR := ansible
 CREDENTIALS := $(PACKER_DIR)/credentials.pkr.hcl
 PACKER_LOG_LEVEL := 1
 
@@ -52,6 +55,16 @@ help:
 	@echo "  $(GREEN)terraform-fmt$(NC)           - Formatta file Terraform"
 	@echo "  $(GREEN)clean-terraform$(NC)         - Pulisce solo file Terraform"
 	@echo ""
+	@echo "$(YELLOW)Ansible Configuration:$(NC)"
+	@echo "  $(GREEN)ansible-check$(NC)           - Verifica configurazione Ansible"
+	@echo "  $(GREEN)ansible-ping$(NC)            - Testa connettività agli host"
+	@echo "  $(GREEN)ansible-deploy$(NC)          - Esegue playbook principale"
+	@echo "  $(GREEN)ansible-deploy-staging$(NC)  - Deploy su ambiente staging"
+	@echo "  $(GREEN)ansible-docker-compose$(NC)  - Installa Docker Compose su Ubuntu VM"
+	@echo "  $(GREEN)ansible-pihole$(NC)          - Deploy Pi-hole + Unbound DNS stack"
+	@echo "  $(GREEN)ansible-lint$(NC)            - Analizza playbook con ansible-lint"
+	@echo "  $(GREEN)ansible-vault-edit$(NC)      - Modifica vault per secrets"
+	@echo ""
 	@echo "$(YELLOW)Utilità:$(NC)"
 	@echo "  $(GREEN)show-ips$(NC)                - Mostra configurazione IP"
 	@echo "  $(GREEN)dev-check$(NC)               - Controlli di sviluppo"
@@ -77,6 +90,12 @@ check:
 		echo "$(GREEN)✓ $(shell $(TERRAFORM) version | head -n1)$(NC)"; \
 	else \
 		echo "$(RED)✗ Terraform non trovato$(NC)"; exit 1; \
+	fi
+	@echo -n "$(YELLOW)Checking Ansible...$(NC) "
+	@if command -v $(ANSIBLE) >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ $(shell $(ANSIBLE) --version | head -n1)$(NC)"; \
+	else \
+		echo "$(RED)✗ Ansible non trovato$(NC)"; exit 1; \
 	fi
 	@echo -n "$(YELLOW)Checking credentials...$(NC) "
 	@if [ -f "$(CREDENTIALS)" ]; then \
@@ -278,3 +297,89 @@ dev-check:
 			echo "$(RED)✗$(NC) Directory $$template mancante"; \
 		fi; \
 	done
+
+# ================================================
+# ANSIBLE TARGETS
+# ================================================
+
+# Verifica configurazione Ansible
+.PHONY: ansible-check
+ansible-check:
+	@echo "$(BLUE)=== Verifica Configurazione Ansible ===$(NC)"
+	@echo -n "$(YELLOW)Checking Ansible config...$(NC) "
+	@if [ -f "$(ANSIBLE_DIR)/ansible.cfg" ]; then \
+		echo "$(GREEN)✓ File ansible.cfg trovato$(NC)"; \
+	else \
+		echo "$(RED)✗ File ansible.cfg mancante$(NC)"; exit 1; \
+	fi
+	@echo -n "$(YELLOW)Checking inventory...$(NC) "
+	@if [ -f "$(ANSIBLE_DIR)/inventories/production/hosts.yml" ]; then \
+		echo "$(GREEN)✓ Inventory production trovato$(NC)"; \
+	else \
+		echo "$(RED)✗ Inventory production mancante$(NC)"; exit 1; \
+	fi
+	@echo "$(GREEN)Configurazione Ansible verificata$(NC)"
+
+# Test connettività
+.PHONY: ansible-ping
+ansible-ping:
+	@echo "$(BLUE)=== Test Connettività Ansible ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE) all -m ping
+
+.PHONY: ansible-ping-staging
+ansible-ping-staging:
+	@echo "$(BLUE)=== Test Connettività Staging ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE) -i inventories/staging/hosts.yml all -m ping
+
+# Deploy playbook principale
+.PHONY: ansible-deploy
+ansible-deploy: ansible-check
+	@echo "$(BLUE)=== Deploy Ansible Production ===$(NC)"
+	@echo "$(YELLOW)Attenzione: Questa operazione configurerà i server in produzione!$(NC)"
+	@read -p "Confermi il deploy? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/site.yml; \
+	else \
+		echo "$(YELLOW)Operazione annullata$(NC)"; \
+	fi
+
+# Deploy ambiente staging
+.PHONY: ansible-deploy-staging
+ansible-deploy-staging:
+	@echo "$(BLUE)=== Deploy Ansible Staging ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/staging/hosts.yml playbooks/site.yml
+
+# Lint playbooks
+.PHONY: ansible-lint
+ansible-lint:
+	@echo "$(BLUE)=== Ansible Lint ===$(NC)"
+	@if command -v ansible-lint >/dev/null 2>&1; then \
+		cd $(ANSIBLE_DIR) && ansible-lint playbooks/; \
+	else \
+		echo "$(YELLOW)ansible-lint non trovato, installa con: pip install ansible-lint$(NC)"; \
+	fi
+
+# Gestione vault
+.PHONY: ansible-vault-edit
+ansible-vault-edit:
+	@echo "$(BLUE)=== Modifica Ansible Vault ===$(NC)"
+	@if [ ! -f "$(ANSIBLE_DIR)/group_vars/vault.yml" ]; then \
+		echo "$(YELLOW)Creazione nuovo file vault...$(NC)"; \
+		cd $(ANSIBLE_DIR) && ansible-vault create group_vars/vault.yml; \
+	else \
+		cd $(ANSIBLE_DIR) && ansible-vault edit group_vars/vault.yml; \
+	fi
+
+# Deploy Docker Compose
+.PHONY: ansible-docker-compose
+ansible-docker-compose: ansible-check
+	@echo "$(BLUE)=== Deploy Docker Compose ===$(NC)"
+	@echo "$(YELLOW)Installazione Docker Compose su Ubuntu VM...$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/docker-compose.yml
+
+# Deploy Pi-hole + Unbound
+.PHONY: ansible-pihole
+ansible-pihole: ansible-check
+	@echo "$(BLUE)=== Deploy Pi-hole + Unbound DNS Stack ===$(NC)"
+	@echo "$(YELLOW)Configurazione systemd-resolved e deploy Pi-hole + Unbound...$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/pihole-unbound.yml

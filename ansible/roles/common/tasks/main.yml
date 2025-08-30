@@ -1,0 +1,34 @@
+---
+- name: Update system packages
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install common packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - unzip
+      - git
+      - htop
+      - vim
+    state: present
+
+- name: Set timezone
+  ansible.builtin.timezone:
+    name: "{{ system_timezone | default('UTC') }}"
+
+- name: Ensure firewall is configured
+  ansible.builtin.ufw:
+    state: enabled
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "22"  # SSH
+    - "80"  # HTTP
+    - "443" # HTTPS
+  when: configure_firewall | default(true)
