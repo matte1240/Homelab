@@ -41,20 +41,21 @@ source "proxmox-iso" "ubuntu-server-noble" {
 
     # VM OS Settings
     # (Option 1) Local ISO File - Utilizzare se hai già caricato l'ISO su Proxmox
-    boot_iso {
-        type         = "scsi"
-        iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
-        unmount      = true
-        iso_checksum = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
-    }
-    # (Option 2) Download ISO - Commentato per evitare problemi di upload
     # boot_iso {
-    #     type             = "scsi"
-    #     iso_url          = "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
-    #     unmount          = true
-    #     iso_storage_pool = "local"
-    #     iso_checksum     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
+    #     type         = "scsi"
+    #     iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
+    #     unmount      = true
+    #     iso_checksum = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
     # }
+    # (Option 2) Download ISO - Scaricamento diretto su Proxmox
+    boot_iso {
+        type             = "scsi"
+        iso_url          = "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
+        unmount          = true
+        iso_storage_pool = "local"
+        iso_download_pve = true
+        iso_checksum     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
+    }
 
     # VM System Settings
     qemu_agent = true
