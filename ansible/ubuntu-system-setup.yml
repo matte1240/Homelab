@@ -1,6 +1,0 @@
----
-- name: Configure Ubuntu system for Pi-hole
-  hosts: docker_hosts
-  become: yes
-  roles:
-    - ubuntu-system-config

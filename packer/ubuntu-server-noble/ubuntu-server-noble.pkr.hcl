@@ -71,10 +71,10 @@ source "proxmox-iso" "ubuntu-server-noble" {
     }
 
     # VM CPU Settings
-    cores = "1"
+    cores = "4"
 
     # VM Memory Settings
-    memory = "2048"
+    memory = "4096"
 
     # VM Network Settings
     network_adapters {

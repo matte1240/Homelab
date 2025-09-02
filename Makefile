@@ -65,12 +65,24 @@ help:
 	@echo "  $(GREEN)ansible-lint$(NC)            - Analizza playbook con ansible-lint"
 	@echo "  $(GREEN)ansible-vault-edit$(NC)      - Modifica vault per secrets"
 	@echo ""
+	@echo "$(YELLOW)Monitoraggio e Troubleshooting:$(NC)"
+	@echo "  $(GREEN)status-all$(NC)              - Status completo homelab (template, VM, servizi)"
+	@echo "  $(GREEN)test-connectivity$(NC)       - Test connettività completo"
+	@echo "  $(GREEN)logs-services$(NC)           - Mostra logs servizi Docker"
+	@echo "  $(GREEN)reset-all$(NC)               - Reset completo (DISTRUTTIVO!)"
+	@echo ""
 	@echo "$(YELLOW)Utilità:$(NC)"
 	@echo "  $(GREEN)show-ips$(NC)                - Mostra configurazione IP"
 	@echo "  $(GREEN)dev-check$(NC)               - Controlli di sviluppo"
 	@echo ""
+	@echo "$(YELLOW)Deploy Automatizzato:$(NC)"
+	@echo "  $(GREEN)deploy-complete$(NC)         - Deploy completo automatizzato (Packer + Terraform + Ansible)"
+	@echo "  $(GREEN)check-templates$(NC)         - Verifica template Packer su Proxmox"
+	@echo "  $(GREEN)ensure-templates$(NC)        - Garantisce presenza template necessari"
+	@echo ""
 	@echo "$(YELLOW)Esempi:$(NC)"
 	@echo "  make check                    # Verifica prerequisiti"
+	@echo "  make deploy-complete          # Deploy automatizzato completo"
 	@echo "  make build-ubuntu             # Costruisce solo Ubuntu"
 	@echo "  make terraform-plan           # Mostra piano terraform"
 	@echo "  PACKER_LOG=1 make build-all  # Build con log dettagliati"
@@ -161,6 +173,174 @@ build-all: check
 	@$(MAKE) build-debian-trixie
 	@echo ""
 	@echo "$(GREEN)=== Tutti i template completati con successo! ===$(NC)"
+
+# ================================================
+# DEPLOY AUTOMATIZZATO COMPLETO
+# ================================================
+
+# Verifica template Packer esistenti su Proxmox
+.PHONY: check-templates
+check-templates:
+	@echo "$(BLUE)=== Controllo Template su Proxmox ===$(NC)"
+	@echo "$(YELLOW)Verifico presenza template necessari...$(NC)"
+	@UBUNTU_TEMPLATE_ID=$$(grep 'ubuntu_template_id' $(TERRAFORM_DIR)/terraform.tfvars | grep -oE '[0-9]+' || echo "900"); \
+	PROXMOX_HOST=$$(grep 'proxmox_api_url' $(TERRAFORM_DIR)/terraform.tfvars | sed 's/.*https:\/\/\([^:]*\).*/\1/' || echo "192.168.178.70"); \
+	PROXMOX_TOKEN_ID=$$(grep 'proxmox_token_id' $(TERRAFORM_DIR)/terraform.tfvars | sed 's/.*= *"\([^"]*\)".*/\1/' || echo ""); \
+	PROXMOX_TOKEN_SECRET=$$(grep 'proxmox_token_secret' $(TERRAFORM_DIR)/terraform.tfvars | sed 's/.*= *"\([^"]*\)".*/\1/' || echo ""); \
+	echo "$(YELLOW)Controllo template Ubuntu (ID: $$UBUNTU_TEMPLATE_ID) su $$PROXMOX_HOST...$(NC)"; \
+	if command -v pvesh >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ Usando pvesh per controllo diretto$(NC)"; \
+		if pvesh get /nodes/pve/qemu/$$UBUNTU_TEMPLATE_ID/config >/dev/null 2>&1; then \
+			echo "$(GREEN)✓ Template Ubuntu ($$UBUNTU_TEMPLATE_ID) trovato$(NC)"; \
+			echo "ubuntu_template_exists=true" > /tmp/template_check; \
+		else \
+			echo "$(RED)✗ Template Ubuntu ($$UBUNTU_TEMPLATE_ID) non trovato$(NC)"; \
+			echo "ubuntu_template_exists=false" > /tmp/template_check; \
+		fi; \
+	elif [ ! -z "$$PROXMOX_TOKEN_ID" ] && [ ! -z "$$PROXMOX_TOKEN_SECRET" ]; then \
+		echo "$(GREEN)✓ Usando API REST per controllo template$(NC)"; \
+		HTTP_CODE=$$(curl -k -s -o /dev/null -w "%{http_code}" \
+			-H "Authorization: PVEAPIToken=$$PROXMOX_TOKEN_ID=$$PROXMOX_TOKEN_SECRET" \
+			"https://$$PROXMOX_HOST:8006/api2/json/nodes/pve/qemu/$$UBUNTU_TEMPLATE_ID/config" 2>/dev/null || echo "000"); \
+		if [ "$$HTTP_CODE" = "200" ]; then \
+			echo "$(GREEN)✓ Template Ubuntu ($$UBUNTU_TEMPLATE_ID) trovato via API$(NC)"; \
+			echo "ubuntu_template_exists=true" > /tmp/template_check; \
+		else \
+			echo "$(RED)✗ Template Ubuntu ($$UBUNTU_TEMPLATE_ID) non trovato (HTTP: $$HTTP_CODE)$(NC)"; \
+			echo "ubuntu_template_exists=false" > /tmp/template_check; \
+		fi; \
+	else \
+		echo "$(YELLOW)⚠ pvesh e credenziali API non disponibili, uso controllo di base...$(NC)"; \
+		if ping -c 1 $$PROXMOX_HOST >/dev/null 2>&1; then \
+			echo "$(YELLOW)Host Proxmox raggiungibile, assumo template presente$(NC)"; \
+			echo "ubuntu_template_exists=true" > /tmp/template_check; \
+		else \
+			echo "$(RED)✗ Host Proxmox non raggiungibile$(NC)"; \
+			echo "ubuntu_template_exists=false" > /tmp/template_check; \
+		fi; \
+	fi
+
+# Garantisce presenza template necessari
+.PHONY: ensure-templates
+ensure-templates: check-templates
+	@echo "$(BLUE)=== Verifica e Creazione Template ===$(NC)"
+	@if [ -f /tmp/template_check ]; then \
+		source /tmp/template_check 2>/dev/null || ubuntu_template_exists=false; \
+		if [ "$$ubuntu_template_exists" = "false" ]; then \
+			echo "$(YELLOW)Template Ubuntu mancante, procedo con la creazione...$(NC)"; \
+			$(MAKE) build-ubuntu; \
+			echo "$(GREEN)✓ Template Ubuntu creato con successo$(NC)"; \
+		else \
+			echo "$(GREEN)✓ Template Ubuntu già presente$(NC)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)Stato template non determinato, creo template per sicurezza...$(NC)"; \
+		$(MAKE) build-ubuntu; \
+	fi
+	@rm -f /tmp/template_check
+
+# Verifica e gestione stato Terraform
+.PHONY: terraform-check-and-apply
+terraform-check-and-apply:
+	@echo "$(BLUE)=== Verifica e Gestione Terraform ===$(NC)"
+	@cd $(TERRAFORM_DIR) && \
+	if [ ! -d ".terraform" ]; then \
+		echo "$(YELLOW)Terraform non inizializzato, procedo con init...$(NC)"; \
+		$(TERRAFORM) init; \
+	fi; \
+	echo "$(YELLOW)Controllo stato delle VM...$(NC)"; \
+	CURRENT_STATE=$$($(TERRAFORM) state list | wc -l); \
+	if [ $$CURRENT_STATE -eq 0 ]; then \
+		echo "$(YELLOW)Nessuna VM presente, procedo con la creazione...$(NC)"; \
+		$(TERRAFORM) apply -auto-approve; \
+		echo "$(GREEN)✓ VM create con successo$(NC)"; \
+	else \
+		echo "$(YELLOW)VM esistenti rilevate, controllo se sono aggiornate...$(NC)"; \
+		$(TERRAFORM) plan -detailed-exitcode -out=tf.plan; \
+		PLAN_EXIT_CODE=$$?; \
+		if [ $$PLAN_EXIT_CODE -eq 2 ]; then \
+			echo "$(YELLOW)Modifiche rilevate, applico aggiornamenti...$(NC)"; \
+			$(TERRAFORM) apply tf.plan; \
+			echo "$(GREEN)✓ VM aggiornate con successo$(NC)"; \
+		elif [ $$PLAN_EXIT_CODE -eq 1 ]; then \
+			echo "$(RED)✗ Errore nel plan Terraform$(NC)"; \
+			exit 1; \
+		else \
+			echo "$(GREEN)✓ VM già aggiornate$(NC)"; \
+		fi; \
+		rm -f tf.plan; \
+	fi
+
+# Deploy Ansible completo o incrementale
+.PHONY: ansible-deploy-smart
+ansible-deploy-smart:
+	@echo "$(BLUE)=== Deploy Ansible Intelligente ===$(NC)"
+	@echo "$(YELLOW)Verifico stato deploy precedenti...$(NC)"
+	@cd $(ANSIBLE_DIR) && \
+	if $(ANSIBLE) all -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
+		echo "$(GREEN)✓ Host raggiungibili$(NC)"; \
+		echo "$(YELLOW)Controllo se è necessario un deploy completo...$(NC)"; \
+		if [ ! -f /tmp/homelab_deployed ]; then \
+			echo "$(YELLOW)Deploy completo necessario...$(NC)"; \
+			$(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml -v; \
+			echo "deployment_date=$$(date)" > /tmp/homelab_deployed; \
+			echo "$(GREEN)✓ Deploy completo terminato$(NC)"; \
+		else \
+			echo "$(YELLOW)Deploy incrementale - solo modifiche necessarie...$(NC)"; \
+			$(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml --check --diff; \
+			read -p "Applicare le modifiche rilevate? (y/N): " confirm; \
+			if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+				$(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml; \
+				echo "$(GREEN)✓ Deploy incrementale completato$(NC)"; \
+			else \
+				echo "$(YELLOW)Deploy saltato$(NC)"; \
+			fi; \
+		fi; \
+	else \
+		echo "$(RED)✗ Host non raggiungibili, attendo VM...$(NC)"; \
+		echo "$(YELLOW)Attendo 30 secondi per il boot delle VM...$(NC)"; \
+		sleep 30; \
+		if $(ANSIBLE) all -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
+			echo "$(GREEN)✓ Host ora raggiungibili, procedo con deploy...$(NC)"; \
+			$(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml; \
+			echo "deployment_date=$$(date)" > /tmp/homelab_deployed; \
+		else \
+			echo "$(RED)✗ Host ancora non raggiungibili, controlla configurazione$(NC)"; \
+			exit 1; \
+		fi; \
+	fi
+
+# Deploy completo automatizzato
+.PHONY: deploy-complete
+deploy-complete: check
+	@echo "$(BLUE)╔══════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(BLUE)║                    DEPLOY AUTOMATIZZATO COMPLETO             ║$(NC)"
+	@echo "$(BLUE)╚══════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Questo processo eseguirà automaticamente:$(NC)"
+	@echo "$(GREEN)1.$(NC) Controllo e creazione template Packer (se necessari)"
+	@echo "$(GREEN)2.$(NC) Verifica e gestione VM Terraform (creazione/aggiornamento)"
+	@echo "$(GREEN)3.$(NC) Deploy completo o incrementale Ansible"
+	@echo ""
+	@read -p "Confermi l'avvio del deploy automatizzato? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "$(BLUE)▶ FASE 1: Template Packer$(NC)"; \
+		$(MAKE) ensure-templates; \
+		echo ""; \
+		echo "$(BLUE)▶ FASE 2: Infrastruttura Terraform$(NC)"; \
+		$(MAKE) terraform-check-and-apply; \
+		echo ""; \
+		echo "$(BLUE)▶ FASE 3: Configurazione Ansible$(NC)"; \
+		$(MAKE) ansible-deploy-smart; \
+		echo ""; \
+		echo "$(GREEN)╔══════════════════════════════════════════════════════════════╗$(NC)"; \
+		echo "$(GREEN)║                   DEPLOY COMPLETATO CON SUCCESSO!            ║$(NC)"; \
+		echo "$(GREEN)╚══════════════════════════════════════════════════════════════╝$(NC)"; \
+		echo "$(YELLOW)Riepilogo deployment:$(NC)"; \
+		cd $(TERRAFORM_DIR) && $(TERRAFORM) output; \
+	else \
+		echo "$(YELLOW)Deploy automatizzato annullato$(NC)"; \
+	fi
 
 # ================================================
 # TERRAFORM TARGETS
@@ -383,3 +563,96 @@ ansible-pihole: ansible-check
 	@echo "$(BLUE)=== Deploy Pi-hole + Unbound DNS Stack ===$(NC)"
 	@echo "$(YELLOW)Configurazione systemd-resolved e deploy Pi-hole + Unbound...$(NC)"
 	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/pihole-unbound.yml
+
+# ================================================
+# MONITORAGGIO E TROUBLESHOOTING
+# ================================================
+
+# Status completo del deployment
+.PHONY: status-all
+status-all:
+	@echo "$(BLUE)╔══════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(BLUE)║                      STATUS HOMELAB                          ║$(NC)"
+	@echo "$(BLUE)╚══════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)📋 TEMPLATE PACKER:$(NC)"
+	@$(MAKE) check-templates 2>/dev/null || echo "$(RED)Errore controllo template$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🏗️  INFRASTRUTTURA TERRAFORM:$(NC)"
+	@$(MAKE) terraform-status 2>/dev/null || echo "$(RED)Terraform non inizializzato$(NC)"
+	@echo ""
+	@echo "$(YELLOW)⚙️  SERVIZI ANSIBLE:$(NC)"
+	@cd $(ANSIBLE_DIR) && if $(ANSIBLE) all -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
+		echo "$(GREEN)✓ Host raggiungibili$(NC)"; \
+		echo "$(YELLOW)Servizi attivi:$(NC)"; \
+		$(ANSIBLE) all -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null || echo "$(YELLOW)Docker non disponibile$(NC)"; \
+	else \
+		echo "$(RED)✗ Host non raggiungibili$(NC)"; \
+	fi
+
+# Reset completo (attenzione!)
+.PHONY: reset-all
+reset-all:
+	@echo "$(RED)╔══════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(RED)║                        RESET COMPLETO                        ║$(NC)"
+	@echo "$(RED)║                      ⚠️  ATTENZIONE! ⚠️                       ║$(NC)"
+	@echo "$(RED)╚══════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(RED)Questa operazione:$(NC)"
+	@echo "$(RED)- Distruggerà tutte le VM Terraform$(NC)"
+	@echo "$(RED)- Rimuoverà tutti i file di stato$(NC)"
+	@echo "$(RED)- Pulirà cache e file temporanei$(NC)"
+	@echo ""
+	@read -p "Sei ASSOLUTAMENTE SICURO? (type 'RESET' to confirm): " confirm; \
+	if [ "$$confirm" = "RESET" ]; then \
+		echo "$(YELLOW)Procedendo con reset completo...$(NC)"; \
+		$(MAKE) terraform-destroy; \
+		$(MAKE) clean-all; \
+		rm -f /tmp/homelab_deployed /tmp/template_check; \
+		echo "$(GREEN)Reset completo terminato$(NC)"; \
+	else \
+		echo "$(YELLOW)Reset annullato$(NC)"; \
+	fi
+
+# Test connettività completo
+.PHONY: test-connectivity
+test-connectivity:
+	@echo "$(BLUE)=== Test Connettività Completo ===$(NC)"
+	@echo "$(YELLOW)Test connettività Proxmox...$(NC)"
+	@PROXMOX_HOST=$$(grep 'proxmox_api_url' $(TERRAFORM_DIR)/terraform.tfvars | sed 's/.*https:\/\/\([^:]*\).*/\1/' 2>/dev/null || echo "192.168.178.70"); \
+	if ping -c 3 $$PROXMOX_HOST >/dev/null 2>&1; then \
+		echo "$(GREEN)✓ Proxmox ($$PROXMOX_HOST) raggiungibile$(NC)"; \
+	else \
+		echo "$(RED)✗ Proxmox ($$PROXMOX_HOST) non raggiungibile$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Test connettività VM...$(NC)"
+	@cd $(ANSIBLE_DIR) && $(ANSIBLE) all -m ping 2>/dev/null || echo "$(RED)✗ VM non raggiungibili$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Test servizi web...$(NC)"
+	@cd $(ANSIBLE_DIR) && \
+	VM_IPS=$$($(ANSIBLE) all -m setup -a "filter=ansible_default_ipv4" 2>/dev/null | grep '"address"' | cut -d'"' -f4 || echo ""); \
+	for ip in $$VM_IPS; do \
+		if [ ! -z "$$ip" ]; then \
+			echo -n "$(YELLOW)Traefik ($$ip:80): $(NC)"; \
+			if curl -s -o /dev/null -w "%{http_code}" "http://$$ip" | grep -q "200\|301\|302"; then \
+				echo "$(GREEN)✓ Risponde$(NC)"; \
+			else \
+				echo "$(RED)✗ Non risponde$(NC)"; \
+			fi; \
+			echo -n "$(YELLOW)Pi-hole ($$ip:8080): $(NC)"; \
+			if curl -s -o /dev/null -w "%{http_code}" "http://$$ip:8080" | grep -q "200\|301\|302"; then \
+				echo "$(GREEN)✓ Risponde$(NC)"; \
+			else \
+				echo "$(RED)✗ Non risponde$(NC)"; \
+			fi; \
+		fi; \
+	done
+
+# Logs servizi
+.PHONY: logs-services
+logs-services:
+	@echo "$(BLUE)=== Logs Servizi Homelab ===$(NC)"
+	@cd $(ANSIBLE_DIR) && \
+	echo "$(YELLOW)Logs Docker Compose:$(NC)"; \
+	$(ANSIBLE) all -m shell -a "cd /opt/homelab && docker compose logs --tail=20" 2>/dev/null || echo "$(RED)Errore recupero logs$(NC)"

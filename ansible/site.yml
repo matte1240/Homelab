@@ -1,33 +1,4 @@
 ---
-- name: Deploy Docker and Docker Compose Applications
-  hosts: docker_hosts
-  become: true
-  gather_facts: true
-  
-  pre_tasks:
-    - name: Wait for system to be ready
-      ansible.builtin.wait_for_connection:
-        timeout: 300
-
-  roles:
-    - role: common
-      tags: [common]
-    - role: docker_install
-      tags: [docker, install]
-    - role: docker_compose
-      tags: [compose, deploy]
-
-  post_tasks:
-    - name: Verify Docker service status
-      ansible.builtin.systemd:
-        name: docker
-        state: started
-      check_mode: true
-      register: docker_status
-
-    - name: Display deployment summary
-      ansible.builtin.debug:
-        msg:
-          - "Docker installed: {{ 'Yes' if docker_status.status.ActiveState == 'active' else 'No' }}"
-          - "Application deployed to: {{ app_directory }}"
-          - "Project name: {{ compose_project_name }}"
+# Playbook principale semplificato per il deploy completo dell'homelab
+# Ora tutto è integrato in un singolo flusso
+- import_playbook: playbooks/homelab-stack.yml

@@ -16,15 +16,16 @@ provider "proxmox" {
   insecure = true
 }
 
-# Create Debian VM with cloud-init
-resource "proxmox_virtual_environment_vm" "debian_vm" {
-  name      = var.vm_name
+# Create Ubuntu VMs with incremental IDs and IPs
+resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
+  count     = var.vm_count
+  name      = "${var.vm_name_prefix}-${format("%02d", count.index + 1)}"
   node_name = var.proxmox_node
-  vm_id     = var.vm_id
+  vm_id     = var.vm_id_start + count.index
   
-  # Clone from template
+  # Clone from Ubuntu template
   clone {
-    vm_id = var.debian_template_id
+    vm_id = var.ubuntu_template_id
   }
   
   # Agent
@@ -64,63 +65,8 @@ resource "proxmox_virtual_environment_vm" "debian_vm" {
     
     ip_config {
       ipv4 {
-        address = var.ip_config != null ? var.ip_config.ip : "dhcp"
-        gateway = var.ip_config != null ? var.ip_config.gateway : null
-      }
-    }
-  }
-}
-
-# Create Ubuntu VM with cloud-init
-resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
-  name      = var.ubuntu_vm_name
-  node_name = var.proxmox_node
-  vm_id     = var.ubuntu_vm_id
-  
-  # Clone from Ubuntu template
-  clone {
-    vm_id = var.ubuntu_template_id
-  }
-  
-  # Agent
-  agent {
-    enabled = true
-  }
-  
-  # CPU and Memory
-  cpu {
-    cores = 2
-  }
-  
-  memory {
-    dedicated = 2048
-  }
-  
-  # Network configuration
-  network_device {
-    bridge = var.network_bridge
-    model  = "virtio"
-  }
-  
-  # Cloud-init configuration
-  initialization {
-    datastore_id = var.storage_pool
-    
-    user_account {
-      username = "ubuntu"
-      password = "ubuntu"
-      keys     = [var.ssh_keys]
-    }
-    
-    dns {
-      servers = var.dns_servers
-      domain  = var.search_domain
-    }
-    
-    ip_config {
-      ipv4 {
-        address = var.ubuntu_ip_config != null ? var.ubuntu_ip_config.ip : "dhcp"
-        gateway = var.ubuntu_ip_config != null ? var.ubuntu_ip_config.gateway : null
+        address = var.use_dhcp ? "dhcp" : "${var.ip_base_address}${var.ip_start + count.index}/${var.ip_subnet_mask}"
+        gateway = var.use_dhcp ? null : var.ip_gateway
       }
     }
   }

@@ -22,6 +22,10 @@ id_rsa*
 *.env
 .env.*
 
+# Secrets file
+secrets.yml
+secrets.yaml
+
 # Secrets and credentials
 secrets/
 credentials/

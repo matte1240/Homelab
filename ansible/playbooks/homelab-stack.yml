@@ -1,117 +1,23 @@
 ---
-- name: Deploy Homelab Stack (Traefik + Pi-hole + Uptime Kuma)
+- name: Setup Ubuntu System and Deploy Homelab Stack
   hosts: docker_hosts
   become: yes
   gather_facts: yes
-  vars:
-    compose_project_name: homelab
-    app_directory: /opt/homelab
-    network_subnet: "172.21.0.0/16"
-    
-    # Domain configuration
-    domain_name: mb.home  # Using nip.io for local domain resolution
-    
-    # Create necessary directories and volumes
-    compose_volumes:
-      - name: traefik_data
-        driver: local
-      - name: pihole_config
-        driver: local
-      - name: pihole_dnsmasq
-        driver: local
-      - name: uptime_kuma_data
-        driver: local
-
-    compose_services:
-      # Traefik - Reverse Proxy
-      - name: traefik
-        image: traefik:v3.0
-        container_name: traefik
-        restart: unless-stopped
-        ports:
-          - "80:80"
-          - "443:443"
-          - "8081:8080"  # Traefik dashboard
-        volumes:
-          - "/var/run/docker.sock:/var/run/docker.sock:ro"
-          - "traefik_data:/data"
-          - "{{ app_directory }}/traefik:/etc/traefik:ro"
-        security_opt:
-          - "no-new-privileges:true"
-        labels:
-          traefik.enable: "true"
-          traefik.http.routers.traefik-dashboard.rule: "Host(`traefik.{{ domain_name }}`)"
-          traefik.http.routers.traefik-dashboard.entrypoints: "http"
-          traefik.http.services.traefik-dashboard.loadbalancer.server.port: "8080"
-
-      # Unbound DNS Server
-      - name: unbound
-        image: mvance/unbound:latest
-        container_name: unbound
-        restart: unless-stopped
-        ports:
-          - "5353:53/tcp"
-          - "5353:53/udp"
-        volumes:
-          - "{{ app_directory }}/unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro"
-        cap_add:
-          - "NET_BIND_SERVICE"
-        security_opt:
-          - "no-new-privileges:true"
-        labels:
-          traefik.enable: "false"
-
-      # Pi-hole DNS Ad-blocker
-      - name: pihole
-        image: pihole/pihole:latest
-        container_name: pihole
-        restart: unless-stopped
-        ports:
-          - "53:53/tcp"
-          - "53:53/udp"
-        volumes:
-          - "pihole_config:/etc/pihole"
-          - "pihole_dnsmasq:/etc/dnsmasq.d"
-        environment:
-          TZ: "Europe/Rome"
-          # Pi-hole v6 configuration using FTLCONF_ prefix
-          FTLCONF_webserver_api_password: "admin123"
-          FTLCONF_dns_upstreams: "unbound#53"  # Unbound DNS server
-          FTLCONF_dns_listeningMode: "all"  # Required for Docker bridge network
-          FTLCONF_dns_dnssec: "true"
-          FTLCONF_webserver_cors_hosts: "pihole.{{ domain_name }}"
-          VIRTUAL_HOST: "pihole.{{ domain_name }}"
-        depends_on:
-          - unbound
-        security_opt:
-          - "no-new-privileges:true"
-        cap_add:
-          - "NET_BIND_SERVICE"
-          - "NET_ADMIN"
-        labels:
-          traefik.enable: "true"
-          traefik.http.routers.pihole.rule: "Host(`pihole.{{ domain_name }}`)"
-          traefik.http.routers.pihole.entrypoints: "http"
-          traefik.http.services.pihole.loadbalancer.server.port: "80"
-
-      # Uptime Kuma - Monitoring
-      - name: uptime-kuma
-        image: louislam/uptime-kuma:1
-        container_name: uptime-kuma
-        restart: unless-stopped
-        volumes:
-          - "uptime_kuma_data:/app/data"
-        environment:
-          UPTIME_KUMA_PORT: "3001"
-        security_opt:
-          - "no-new-privileges:true"
-        labels:
-          traefik.enable: "true"
-          traefik.http.routers.uptime-kuma.rule: "Host(`uptime.{{ domain_name }}`)"
-          traefik.http.routers.uptime-kuma.entrypoints: "http"
-          traefik.http.services.uptime-kuma.loadbalancer.server.port: "3001"
-
+  
+  # Caricare le variabili sensibili da file separato
+  vars_files:
+    - ../secrets.yml
+  
+  # Integrare la configurazione del sistema Ubuntu prima del deploy
   pre_tasks:
+    - name: Include Ubuntu system configuration
+      include_role:
+        name: ubuntu-system-config
+    
+    - name: Install Docker
+      include_role:
+        name: docker_install
+        
     - name: Create application directory
       file:
         path: "{{ app_directory }}"
@@ -128,16 +34,24 @@
         group: "{{ ansible_user }}"
         mode: '0755'
 
-    - name: Copy Traefik configuration files
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ app_directory }}/traefik/{{ item.dest }}"
+    - name: Generate Traefik configuration from template
+      template:
+        src: traefik.yml.j2
+        dest: "{{ app_directory }}/traefik/traefik.yml"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
-      loop:
-        - { src: traefik.yml, dest: traefik.yml }
-        - { src: traefik-dynamic.yml, dest: dynamic.yml }
+
+    - name: Create Traefik environment file with Cloudflare credentials
+      copy:
+        dest: "{{ app_directory }}/traefik/.env"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+        content: |
+          # Cloudflare configuration for Let's Encrypt DNS challenge
+          CLOUDFLARE_EMAIL={{ cloudflare_email }}
+          CLOUDFLARE_DNS_API_TOKEN={{ cloudflare_dns_api_token }}
 
     - name: Create unbound configuration directory
       file:
@@ -194,6 +108,116 @@
               private-address: 10.0.0.0/8
               private-address: fd00::/8
               private-address: fe80::/10
+        
+  vars:
+    compose_project_name: homelab
+    app_directory: /opt/homelab
+    network_subnet: "172.21.0.0/16"
+    
+    # Domain configuration
+    domain_name: mb.home  # Using nip.io for local domain resolution
+    
+    # Create necessary directories and volumes
+    compose_volumes:
+      - name: traefik_data
+        driver: local
+      - name: pihole_config
+        driver: local
+      - name: pihole_dnsmasq
+        driver: local
+      - name: uptime_kuma_data
+        driver: local
+
+    compose_services:
+      # Traefik - Reverse Proxy
+      - name: traefik
+        image: traefik:v3.0
+        container_name: traefik
+        restart: unless-stopped
+        ports:
+          - "80:80"
+          - "443:443"
+          - "8081:8080"  # Traefik dashboard
+        volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock:ro"
+          - "traefik_data:/data"
+          - "{{ app_directory }}/traefik/traefik.yml:/etc/traefik/traefik.yml:ro"
+        env_file:
+          - "{{ app_directory }}/traefik/.env"
+        security_opt:
+          - "no-new-privileges:true"
+        labels:
+          traefik.enable: "true"
+          traefik.http.routers.traefik-dashboard.rule: "Host(`traefik.{{ domain_name }}`)"
+          traefik.http.routers.traefik-dashboard.entrypoints: "http"
+          traefik.http.services.traefik-dashboard.loadbalancer.server.port: "8080"
+
+      # Unbound DNS Server
+      - name: unbound
+        image: mvance/unbound:latest
+        container_name: unbound
+        restart: unless-stopped
+        ports:
+          - "5353:53/tcp"
+          - "5353:53/udp"
+        volumes:
+          - "{{ app_directory }}/unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro"
+        cap_add:
+          - "NET_BIND_SERVICE"
+        security_opt:
+          - "no-new-privileges:true"
+        labels:
+          traefik.enable: "false"
+
+      # Pi-hole DNS Ad-blocker
+      - name: pihole
+        image: pihole/pihole:latest
+        container_name: pihole
+        restart: unless-stopped
+        ports:
+          - "53:53/tcp"
+          - "53:53/udp"
+        volumes:
+          - "pihole_config:/etc/pihole"
+          - "pihole_dnsmasq:/etc/dnsmasq.d"
+        environment:
+          TZ: "Europe/Rome"
+          # Pi-hole v6 configuration using FTLCONF_ prefix
+          FTLCONF_webserver_api_password: "{{ pihole_webpassword }}"
+          FTLCONF_dns_upstreams: "unbound#53"  # Unbound DNS server (internal Docker network port 53)
+          FTLCONF_dns_listeningMode: "all"  # Required for Docker bridge network
+          FTLCONF_dns_dnssec: "true"
+          FTLCONF_webserver_cors_hosts: "pihole.{{ domain_name }}"
+          VIRTUAL_HOST: "pihole.{{ domain_name }}"
+        depends_on:
+          - unbound
+        security_opt:
+          - "no-new-privileges:true"
+        cap_add:
+          - "NET_BIND_SERVICE"
+          - "NET_ADMIN"
+        labels:
+          traefik.enable: "true"
+          traefik.http.routers.pihole.rule: "Host(`pihole.{{ domain_name }}`)"
+          traefik.http.routers.pihole.entrypoints: "http"
+          traefik.http.services.pihole.loadbalancer.server.port: "80"
+
+      # Uptime Kuma - Monitoring
+      - name: uptime-kuma
+        image: louislam/uptime-kuma:1
+        container_name: uptime-kuma
+        restart: unless-stopped
+        volumes:
+          - "uptime_kuma_data:/app/data"
+        environment:
+          UPTIME_KUMA_PORT: "3001"
+        security_opt:
+          - "no-new-privileges:true"
+        labels:
+          traefik.enable: "true"
+          traefik.http.routers.uptime-kuma.rule: "Host(`uptime.{{ domain_name }}`)"
+          traefik.http.routers.uptime-kuma.entrypoints: "http"
+          traefik.http.services.uptime-kuma.loadbalancer.server.port: "3001"
 
   roles:
     - role: docker_compose
@@ -210,7 +234,7 @@
           - ""
           - "DNS Configuration:"
           - "Primary DNS: {{ ansible_host }}"
-          - "Pi-hole Web Password: admin123 (CHANGE THIS!)"
+          - "Pi-hole Web Password: {{ pihole_webpassword }}"
           - ""
           - "To configure clients to use Pi-hole DNS:"
           - "Set DNS server to {{ ansible_host }} in your router or device settings"

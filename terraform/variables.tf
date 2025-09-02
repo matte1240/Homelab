@@ -21,47 +21,48 @@ variable "proxmox_node" {
   default     = "pve"
 }
 
-# VM configuration variables
-variable "vm_name" {
-  description = "VM name"
+# VM scaling variables
+variable "vm_count" {
+  description = "Number of VMs to create"
+  type        = number
+  default     = 1
+}
+
+variable "vm_name_prefix" {
+  description = "VM name prefix (will be followed by -01, -02, etc.)"
   type        = string
-  default     = "debian-vm"
+  default     = "ubuntu-vm"
 }
 
-variable "vm_id" {
-  description = "VM ID"
+variable "vm_id_start" {
+  description = "Starting VM ID (subsequent VMs will increment from this)"
   type        = number
-  default     = 301
+  default     = 300
 }
 
+# VM configuration variables
 variable "vm_cores" {
-  description = "Number of CPU cores"
+  description = "Number of CPU cores per VM"
   type        = number
-  default     = 2
+  default     = 4
 }
 
 variable "vm_memory" {
-  description = "Amount of memory in MB"
+  description = "Amount of memory in MB per VM"
   type        = number
-  default     = 2048
+  default     = 4096
 }
 
-variable "template_name" {
-  description = "Template to clone from"
-  type        = string
-  default     = "debian-server-trixie-template"
+variable "ubuntu_template_id" {
+  description = "VM ID of the Ubuntu template"
+  type        = number
+  default     = 900
 }
 
 variable "storage_pool" {
   description = "Storage pool name"
   type        = string
   default     = "data"
-}
-
-variable "disk_size" {
-  description = "Disk size (if different from template's 25G, will resize the disk)"
-  type        = string
-  default     = "25G"
 }
 
 variable "network_bridge" {
@@ -74,14 +75,14 @@ variable "network_bridge" {
 variable "ci_user" {
   description = "Cloud-init user"
   type        = string
-  default     = "debian"
+  default     = "ubuntu"
 }
 
 variable "ci_password" {
   description = "Cloud-init password"
   type        = string
   sensitive   = true
-  default     = null
+  default     = "ubuntu"
 }
 
 variable "ssh_keys" {
@@ -93,7 +94,7 @@ variable "ssh_keys" {
 variable "search_domain" {
   description = "Search domain"
   type        = string
-  default     = "local"
+  default     = "lan"
 }
 
 variable "dns_servers" {
@@ -102,86 +103,33 @@ variable "dns_servers" {
   default     = ["192.168.178.2", "192.168.178.3", "1.1.1.1"]
 }
 
-variable "ip_config" {
-  description = "IP configuration (optional - use DHCP if null)"
-  type = object({
-    ip      = string
-    gateway = string
-  })
-  default = null
+# IP configuration variables
+variable "use_dhcp" {
+  description = "Use DHCP for IP assignment (if false, uses static IPs)"
+  type        = bool
+  default     = false
 }
 
-# Additional cloud-init variables
-variable "packages" {
-  description = "List of packages to install (informational only - handled by template)"
-  type        = list(string)
-  default = [
-    "qemu-guest-agent",
-    "sudo",
-    "curl",
-    "wget",
-    "vim",
-    "htop",
-    "git",
-    "unzip"
-  ]
-}
-
-variable "timezone" {
-  description = "System timezone (informational only - handled by template)"
+variable "ip_base_address" {
+  description = "Base IP address (e.g., '192.168.178.' - note the trailing dot)"
   type        = string
-  default     = "Europe/Rome"
+  default     = "192.168.178."
 }
 
-variable "locale" {
-  description = "System locale (informational only - handled by template)"
+variable "ip_start" {
+  description = "Starting IP address number (will increment for each VM)"
+  type        = number
+  default     = 20
+}
+
+variable "ip_subnet_mask" {
+  description = "Subnet mask (CIDR notation number)"
+  type        = number
+  default     = 24
+}
+
+variable "ip_gateway" {
+  description = "Gateway IP address"
   type        = string
-  default     = "en_US.UTF-8"
-}
-
-variable "run_commands" {
-  description = "Commands to run during cloud-init (informational only - handled by template)"
-  type        = list(string)
-  default = [
-    "systemctl enable qemu-guest-agent",
-    "systemctl start qemu-guest-agent"
-  ]
-}
-
-# Ubuntu VM specific variables
-variable "ubuntu_vm_name" {
-  description = "Ubuntu VM name"
-  type        = string
-  default     = "ubuntu-vm-01"
-}
-
-variable "ubuntu_vm_id" {
-  description = "Ubuntu VM ID"
-  type        = number
-  default     = 302
-}
-
-variable "ubuntu_ip_config" {
-  description = "IP configuration for Ubuntu VM (optional - use DHCP if null)"
-  type = object({
-    ip      = string
-    gateway = string
-  })
-  default = {
-    ip      = "192.168.178.22/24"
-    gateway = "192.168.178.1"
-  }
-}
-
-# Template ID variables
-variable "debian_template_id" {
-  description = "VM ID of the Debian template"
-  type        = number
-  default     = 902
-}
-
-variable "ubuntu_template_id" {
-  description = "VM ID of the Ubuntu template"
-  type        = number
-  default     = 900
+  default     = "192.168.178.1"
 }
