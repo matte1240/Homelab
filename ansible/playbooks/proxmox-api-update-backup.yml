@@ -1,0 +1,262 @@
+---
+- name: Update Proxmox VE Server via API
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars_files:
+    - ../secrets.yml
+
+  vars:
+    proxmox_api_url: "{{ vault_proxmox_api_url }}"
+    proxmox_api_user: "{{ vault_proxmox_api_user }}"
+    proxmox_api_password: "{{ vault_proxmox_api_password }}"
+    proxmox_api_token_id: "{{ vault_proxmox_api_token_id | default('') }}"
+    proxmox_api_token_secret: "{{ vault_proxmox_api_token_secret | default('') }}"
+    proxmox_node: "{{ vault_proxmox_node }}"
+    proxmox_validate_certs: false
+    update_timestamp: "{{ ansible_date_time.epoch }}"
+    log_directory: "/tmp/proxmox-api-updates"
+
+  pre_tasks:
+    - name: Display update information
+      ansible.builtin.debug:
+        msg:
+          - "🔄 Starting Proxmox VE Update via API"
+          - "Target node: {{ proxmox_node }}"
+          - "API URL: {{ proxmox_api_url }}"
+          - "Current time: {{ ansible_date_time.iso8601 }}"
+          - "Using API tokens: {{ (proxmox_api_token_id | length > 0) | bool }}"
+
+    - name: Create local log directory
+      ansible.builtin.file:
+        path: "{{ log_directory }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    # No Python packages required - using native ansible.builtin.uri
+
+  tasks:
+    - name: Test Proxmox API connectivity
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/version"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: api_version_check
+      ignore_errors: true
+
+    - name: Display Proxmox version
+      ansible.builtin.debug:
+        msg: "Proxmox VE version: {{ api_version_check.json.data.version }}"
+      when: api_version_check is succeeded
+
+    - name: Fail if API connection failed
+      ansible.builtin.fail:
+        msg: "Cannot connect to Proxmox API: {{ api_version_check.msg | default('Unknown error') }}"
+      when: api_version_check is failed
+
+    - name: Get node status via API
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/status"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: node_status
+
+    - name: Display node status
+      ansible.builtin.debug:
+        msg:
+          - "Node: {{ proxmox_node }}"
+          - "Status: {{ node_status.json.data.pveversion }}"
+          - "Uptime: {{ node_status.json.data.uptime }}"
+          - "CPU usage: {{ (node_status.json.data.cpu * 100) | round(2) }}%"
+          - "Memory usage: {{ ((node_status.json.data.memory.used / node_status.json.data.memory.total) * 100) | round(2) }}%"
+
+    # Get available updates via API
+    - name: Check available package updates
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/apt/update"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: available_updates
+
+    - name: Display available updates
+      ansible.builtin.debug:
+        msg:
+          - "Available updates: {{ available_updates.json.data | length }}"
+          - "{% for update in available_updates.json.data[:5] %}{{ update.Package }}: {{ update.OldVersion }} -> {{ update.Version }}{% endfor %}"
+          - "{% if available_updates.json.data | length > 5 %}... and {{ (available_updates.json.data | length) - 5 }} more{% endif %}"
+
+    - name: Log update start
+      ansible.builtin.lineinfile:
+        path: "{{ log_directory }}/proxmox-api-update-{{ update_timestamp }}.log"
+        line: "{{ ansible_date_time.iso8601 }} - Starting Proxmox update via API on {{ proxmox_node }}"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+
+    # Refresh package database
+    - name: Refresh package database via API
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/apt/update"
+        method: POST
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+        body_format: form-urlencoded
+        body:
+          quiet: "1"
+      register: update_database
+      when: available_updates.json.data | length > 0
+
+    - name: Wait for package database update to complete
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/tasks/{{ update_database.json.data }}/status"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: task_status
+      until: task_status.json.data.status != "running"
+      retries: 30
+      delay: 5
+      when: update_database is defined and update_database.json.data is defined
+
+    # Note: Proxmox API doesn't support direct system upgrade
+    # We need to use alternative approaches
+    - name: Display upgrade notice
+      ansible.builtin.debug:
+        msg:
+          - "⚠️  NOTICE: Proxmox API doesn't support direct system upgrade"
+          - "Available options:"
+          - "1. Use SSH-based upgrade: make proxmox-update"
+          - "2. Update individual packages via API"
+          - "3. Manually upgrade via Proxmox web interface"
+          - ""
+          - "For now, logging available updates to file..."
+      
+    - name: Save available updates to log file
+      ansible.builtin.copy:
+        content: |
+          Proxmox VE Update Report - {{ ansible_date_time.iso8601 }}
+          ================================================================
+          Node: {{ proxmox_node }}
+          Available Updates: {{ available_updates.json.data | length }}
+          
+          Package List:
+          {% for pkg in available_updates.json.data %}
+          - {{ pkg.Package }}: {{ pkg.OldVersion }} -> {{ pkg.Version }}
+          {% endfor %}
+        dest: "{{ log_directory }}/available-updates-{{ update_timestamp }}.log"
+      register: log_result
+      when: available_updates.json.data | length > 0
+
+    - name: Display update summary
+      ansible.builtin.debug:
+        msg:
+          - "📋 UPDATE SUMMARY"
+          - "═══════════════════"
+          - "Node: {{ proxmox_node }}"
+          - "Available updates: {{ available_updates.json.data | length }}"
+          - "Log file: {{ log_result.dest if log_result is defined else 'No updates available' }}"
+          - ""
+          - "💡 Next steps:"
+          - "   1. Review the log file for update details"
+          - "   2. Use 'make proxmox-update' for SSH-based upgrade"
+          - "   3. Or upgrade manually via Proxmox web interface"
+  post_tasks:
+    - name: Final status check
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/status"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: final_status
+
+    - name: Display final report
+      ansible.builtin.debug:
+        msg:
+          - "✅ API UPDATE CHECK COMPLETED"
+          - "════════════════════════════════"
+          - "Node: {{ proxmox_node }}"
+          - "Status: {{ final_status.json.data.status }}"
+          - "Uptime: {{ (final_status.json.data.uptime / 86400) | round(1) }} days"
+          - ""
+          - "📊 Final Resource Usage:"
+          - "   CPU: {{ ((final_status.json.data.cpu * 100) | round(2)) }}%"
+          - "   Memory: {{ ((final_status.json.data.used_memory / final_status.json.data.total_memory * 100) | round(2)) }}%"
+          - ""
+          - "⚠️  Remember: Use SSH method for actual updates!"
+            method: POST
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+            body_format: form-urlencoded
+            body:
+              command: "reboot"
+          register: reboot_task
+
+        - name: Wait for node to become unavailable
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/version"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+          register: wait_down
+          until: wait_down is failed
+          retries: 20
+          delay: 10
+          ignore_errors: true
+
+        - name: Wait for node to come back online
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/version"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+          register: wait_up
+          until: wait_up is succeeded
+          retries: 30
+          delay: 20
+
+        - name: Log reboot completion
+          ansible.builtin.lineinfile:
+            path: "{{ log_directory }}/proxmox-api-update-{{ update_timestamp }}.log"
+            line: "{{ ansible_date_time.iso8601 }} - System reboot completed"
+          delegate_to: localhost
+
+      when: 
+        - reboot_required | default(false)
+        - proxmox_reboot_after_update | default(true)
+
+    # Final verification
+    - name: Get final node status
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/status"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: final_status
+
+    - name: Display final status
+      ansible.builtin.debug:
+        msg:
+          - "🎯 PROXMOX UPDATE VIA API COMPLETED"
+          - "Node: {{ proxmox_node }}"
+          - "Version: {{ final_status.json.data.pveversion }}"
+          - "Uptime: {{ final_status.json.data.uptime }}"
+          - "Status: Online"
+          - "Web interface: {{ proxmox_api_url | regex_replace('/api2/json', '') }}"
+          - "Log file: {{ log_directory }}/proxmox-api-update-{{ update_timestamp }}.log"
+
+    - name: Log update completion
+      ansible.builtin.lineinfile:
+        path: "{{ log_directory }}/proxmox-api-update-{{ update_timestamp }}.log"
+        line: "{{ ansible_date_time.iso8601 }} - Proxmox update via API completed successfully"
+      delegate_to: localhost

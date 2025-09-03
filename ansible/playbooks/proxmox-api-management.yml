@@ -1,0 +1,207 @@
+---
+- name: Proxmox VE Management via API
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars_files:
+    - ../secrets.yml
+
+  vars:
+    proxmox_api_url: "{{ vault_proxmox_api_url }}"
+    proxmox_api_user: "{{ vault_proxmox_api_user }}"
+    proxmox_api_password: "{{ vault_proxmox_api_password }}"
+    proxmox_api_token_id: "{{ vault_proxmox_api_token_id | default('') }}"
+    proxmox_api_token_secret: "{{ vault_proxmox_api_token_secret | default('') }}"
+    proxmox_node: "{{ vault_proxmox_node }}"
+    proxmox_validate_certs: false
+
+  tasks:
+    - name: Display management options
+      ansible.builtin.debug:
+        msg:
+          - "🔧 Proxmox VE API Management Center"
+          - "Available operations:"
+          - "  1. Full Status Check - Use this playbook with --tags=status"
+          - "  2. VM/Container List - Use this playbook with --tags=vms"
+          - "  3. Storage Status - Use this playbook with --tags=storage"
+          - "  4. Running Tasks - Use this playbook with --tags=tasks"
+          - "  5. Cluster Status - Use this playbook with --tags=cluster"
+          - ""
+          - "Target: {{ proxmox_node }} ({{ proxmox_api_url }})"
+
+    # No Python packages required - using native ansible.builtin.uri
+
+    - name: Test API connectivity
+      ansible.builtin.uri:
+        url: "{{ proxmox_api_url }}/version"
+        method: GET
+        validate_certs: "{{ proxmox_validate_certs }}"
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+      register: api_test
+      tags: [always]
+
+    - name: Comprehensive Status Check
+      block:
+        - name: Get Proxmox version
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/version"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: proxmox_version
+
+        - name: Get node status
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/status"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: node_status
+
+        - name: Get available updates
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/apt/update"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: available_updates
+          ignore_errors: true
+
+        - name: Get running tasks
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/tasks"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: running_tasks
+
+        - name: Calculate uptime
+          ansible.builtin.set_fact:
+            uptime_days: "{{ (node_status.json.data.uptime / 86400) | int }}"
+            uptime_hours: "{{ ((node_status.json.data.uptime % 86400) / 3600) | int }}"
+            uptime_minutes: "{{ ((node_status.json.data.uptime % 3600) / 60) | int }}"
+
+        - name: Display comprehensive status
+          ansible.builtin.debug:
+            msg:
+              - "📊 PROXMOX VE API STATUS REPORT"
+              - "════════════════════════════════"
+              - "🖥️  Node: {{ proxmox_node }}"
+              - "🌐 API URL: {{ proxmox_api_url }}"
+              - "📦 Version: {{ proxmox_version.json.data.version }}"
+              - "⏰ Uptime: {{ uptime_days }}d {{ uptime_hours }}h {{ uptime_minutes }}m"
+              - "🔧 Status: {{ node_status.json.data.status | default('unknown') }}"
+              - ""
+              - "💾 RESOURCES:"
+              - "   CPU: {{ (node_status.json.data.cpu * 100) | round(2) }}% ({{ node_status.json.data.cpuinfo.cpus }} cores)"
+              - "   Memory: {{ ((node_status.json.data.memory.used / node_status.json.data.memory.total) * 100) | round(2) }}% ({{ (node_status.json.data.memory.used / 1024 / 1024 / 1024) | round(2) }}GB / {{ (node_status.json.data.memory.total / 1024 / 1024 / 1024) | round(2) }}GB)"
+              - "   Root FS: {{ ((node_status.json.data.rootfs.used / node_status.json.data.rootfs.total) * 100) | round(2) }}% ({{ (node_status.json.data.rootfs.avail / 1024 / 1024 / 1024) | round(2) }}GB available)"
+              - ""
+              - "📦 UPDATES:"
+              - "   Available: {{ available_updates.json.data | length if available_updates.json is defined else 'Error checking' }}"
+              - ""
+              - "🔄 ACTIVE TASKS:"
+              - "   Running: {{ (running_tasks.json.data | selectattr('status', 'equalto', 'running') | list) | length }}"
+              - "   Total tasks: {{ running_tasks.json.data | length }}"
+
+      when: "'status' in ansible_run_tags or ansible_run_tags == ['all']"
+      tags: [status]
+
+    - name: List VMs and Containers
+      block:
+        - name: Get VMs list
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/qemu"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: vms_list
+
+        - name: Get Containers list
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/lxc"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: containers_list
+
+        - name: Display VMs and Containers
+          ansible.builtin.debug:
+            msg:
+              - "🖥️  VIRTUAL MACHINES ({{ vms_list.json.data | length }}):"
+              - "{% for vm in vms_list.json.data %}   {{ vm.vmid }}: {{ vm.name | default('N/A') }} - {{ vm.status }} ({{ (vm.mem / 1024 / 1024) | round(0) }}MB RAM){% endfor %}"
+              - ""
+              - "📦 CONTAINERS ({{ containers_list.json.data | length }}):"
+              - "{% for ct in containers_list.json.data %}   {{ ct.vmid }}: {{ ct.name | default('N/A') }} - {{ ct.status }} ({{ (ct.mem / 1024 / 1024) | round(0) }}MB RAM){% endfor %}"
+
+      when: "'vms' in ansible_run_tags"
+      tags: [vms]
+
+    - name: Check Storage Status
+      block:
+        - name: Get storage list
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/storage"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: storage_list
+
+        - name: Display storage status
+          ansible.builtin.debug:
+            msg:
+              - "💾 STORAGE STATUS:"
+              - "{% for storage in storage_list.json.data %}   {{ storage.storage }}: {{ storage.type }} - {{ ((storage.used / storage.total) * 100) | round(2) if storage.total > 0 else 'N/A' }}% used ({{ (storage.avail / 1024 / 1024 / 1024) | round(2) if storage.avail is defined else 'N/A' }}GB available){% endfor %}"
+
+      when: "'storage' in ansible_run_tags"
+      tags: [storage]
+
+    - name: Check Running Tasks
+      block:
+        - name: Get recent tasks
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/nodes/{{ proxmox_node }}/tasks?limit=10"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: recent_tasks
+
+        - name: Display recent tasks
+          ansible.builtin.debug:
+            msg:
+              - "🔄 RECENT TASKS (last 10):"
+              - "{% for task in recent_tasks.json.data %}   {{ task.upid }}: {{ task.type }} - {{ task.status }} ({{ task.starttime | human_readable_time if task.starttime is defined else 'N/A' }}){% endfor %}"
+
+      when: "'tasks' in ansible_run_tags"
+      tags: [tasks]
+
+    - name: Check Cluster Status
+      block:
+        - name: Get cluster status
+          ansible.builtin.uri:
+            url: "{{ proxmox_api_url }}/cluster/status"
+            method: GET
+            validate_certs: "{{ proxmox_validate_certs }}"
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+          register: cluster_status
+          ignore_errors: true
+
+        - name: Display cluster status
+          ansible.builtin.debug:
+            msg:
+              - "🔗 CLUSTER STATUS:"
+              - "{% if cluster_status.json is defined %}{% for node in cluster_status.json.data %}   {{ node.name }}: {{ node.type }} - {{ node.online | default('unknown') }}{% endfor %}{% else %}   Single node installation (no cluster){% endif %}"
+
+      when: "'cluster' in ansible_run_tags"
+      tags: [cluster]

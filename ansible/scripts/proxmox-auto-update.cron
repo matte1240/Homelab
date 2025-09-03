@@ -1,0 +1,35 @@
+# Configurazione cron per aggiornamenti automatici Proxmox VE
+# Copia questo file in /etc/cron.d/proxmox-auto-update
+#
+# Formato: m h dom mon dow user command
+#
+# Aggiornamenti automatici:
+# - Lunedì ore 02:00: Manutenzione settimanale
+# - Primo del mese ore 03:00: Aggiornamento completo
+# - Ogni giorno ore 01:00: Controllo aggiornamenti rapidi
+#
+# IMPORTANTE: Modifica il percorso del progetto e l'utente secondo la tua configurazione
+
+# Variabili ambiente
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Aggiornamenti quotidiani rapidi (ore 01:00)
+0 1 * * * root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh >/dev/null 2>&1
+
+# Esempio alternative (decommenta quella che preferisci):
+
+# Solo giorni lavorativi (Lunedì-Venerdì ore 02:00)
+# 0 2 * * 1-5 root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh
+
+# Solo weekend (Sabato ore 03:00)
+# 0 3 * * 6 root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh
+
+# Solo domeniche ore 04:00
+# 0 4 * * 0 root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh
+
+# Configurazione conservativa (solo primo del mese)
+# 0 3 1 * * root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh
+
+# Test ogni ora (solo per debug - NON usare in produzione!)
+# 0 * * * * root /home/matteo/Homelab/ansible/scripts/proxmox-auto-update.sh

@@ -1,0 +1,90 @@
+---
+- name: Proxmox VE Management
+  hosts: proxmox
+  become: true
+  gather_facts: false
+  
+  vars_files:
+    - ../secrets.yml
+
+  tasks:
+    - name: Display management options
+      ansible.builtin.debug:
+        msg:
+          - "🔧 Proxmox VE Management Center"
+          - "Available operations:"
+          - "  1. Full Update (with reboot) - Use: ansible-playbook -i inventories/proxmox playbooks/proxmox-update.yml"
+          - "  2. Quick Update (no reboot) - Use: ansible-playbook -i inventories/proxmox playbooks/proxmox-quick-update.yml"
+          - "  3. Maintenance & Cleanup - Use: ansible-playbook -i inventories/proxmox playbooks/proxmox-maintenance.yml"
+          - "  4. Status Check - Use this playbook with --tags=status"
+          - ""
+          - "Current host: {{ inventory_hostname }}"
+
+    - name: Gather facts for status check
+      ansible.builtin.setup:
+      when: "'status' in ansible_run_tags"
+      tags: [status]
+
+    - name: Check Proxmox status
+      block:
+        - name: Check Proxmox version
+          ansible.builtin.shell: pveversion
+          register: proxmox_version
+          changed_when: false
+
+        - name: Check system uptime
+          ansible.builtin.shell: uptime
+          register: system_uptime
+          changed_when: false
+
+        - name: Check disk usage
+          ansible.builtin.shell: df -h | head -10
+          register: disk_usage
+          changed_when: false
+
+        - name: Check available updates
+          ansible.builtin.shell: |
+            apt list --upgradable 2>/dev/null | grep -v "WARNING" | wc -l
+          register: available_updates
+          changed_when: false
+
+        - name: Check if reboot is required
+          ansible.builtin.stat:
+            path: /var/run/reboot-required
+          register: reboot_required
+
+        - name: Check Proxmox services
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+          register: service_status
+          loop:
+            - pveproxy
+            - pvedaemon
+            - pvestatd
+          changed_when: false
+
+        - name: Check running VMs/Containers
+          ansible.builtin.shell: qm list 2>/dev/null | wc -l && pct list 2>/dev/null | wc -l
+          register: vm_count
+          changed_when: false
+          ignore_errors: true
+
+        - name: Display comprehensive status
+          ansible.builtin.debug:
+            msg:
+              - "📊 PROXMOX VE STATUS REPORT"
+              - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+              - "Version: {{ proxmox_version.stdout }}"
+              - "Uptime: {{ system_uptime.stdout }}"
+              - "Available updates: {{ (available_updates.stdout | int) - 1 }} packages"
+              - "Reboot required: {{ reboot_required.stat.exists }}"
+              - "Running VMs: {{ vm_count.stdout_lines[0] if vm_count.stdout_lines is defined and vm_count.stdout_lines | length > 0 else 'N/A' }}"
+              - "Running Containers: {{ vm_count.stdout_lines[1] if vm_count.stdout_lines is defined and vm_count.stdout_lines | length > 1 else 'N/A' }}"
+              - ""
+              - "💾 DISK USAGE:"
+              - "{{ disk_usage.stdout }}"
+              - ""
+              - "🔗 Web Interface: https://{{ ansible_host }}:8006"
+
+      when: "'status' in ansible_run_tags"
+      tags: [status]

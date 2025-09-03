@@ -1,0 +1,46 @@
+---
+# Proxmox Environment Configuration
+
+# Environment specific settings
+env_name: proxmox
+target_env: proxmox
+
+# Proxmox API settings
+proxmox_api_url: "{{ vault_proxmox_api_url }}"
+proxmox_api_user: "{{ vault_proxmox_api_user }}"
+proxmox_api_password: "{{ vault_proxmox_api_password }}"
+proxmox_api_token_id: "{{ vault_proxmox_api_token_id }}"
+proxmox_api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+proxmox_node: "{{ vault_proxmox_node }}"
+proxmox_validate_certs: false  # Set to true in production with valid certificates
+
+# Proxmox specific settings
+proxmox_version_check: true
+proxmox_backup_before_update: true
+proxmox_reboot_after_update: true
+proxmox_wait_for_reboot: true
+proxmox_update_timeout: 1800  # 30 minutes
+proxmox_reboot_timeout: 600   # 10 minutes
+
+# Notification settings
+notify_on_completion: true
+notification_email: "admin@matteobaracetti.com"
+
+# Safety settings
+backup_directory: /var/backups/proxmox-updates
+log_directory: /var/log/proxmox-updates
+max_backup_age_days: 30
+
+# Update options
+update_no_subscription: true  # Set to true if using Proxmox without subscription
+update_enterprise: false     # Set to true if you have Proxmox VE Enterprise subscription
+test_repositories: false     # Set to true to enable test repositories
+
+# Services to check after update
+services_to_check:
+  - pveproxy
+  - pvedaemon
+  - pvestatd
+  - pve-cluster
+  - corosync
+  - pve-firewall

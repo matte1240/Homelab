@@ -43,10 +43,19 @@ help:
 	@echo "  $(GREEN)deploy-production$(NC) - Deploy to production environment"
 	@echo "  $(GREEN)deploy-development$(NC) - Deploy to development environment"
 	@echo ""
+	@echo "$(YELLOW)Proxmox Management:$(NC)"
+	@echo "  $(GREEN)proxmox-menu$(NC)      - Show Proxmox management options"
+	@echo "  $(GREEN)proxmox-api-setup$(NC) - Setup Proxmox API access"
+	@echo "  $(GREEN)proxmox-api-status$(NC) - Check Proxmox status via API"
+	@echo "  $(GREEN)proxmox-api-update$(NC) - Update Proxmox via API"
+	@echo "  $(GREEN)proxmox-status$(NC)    - Check Proxmox status via SSH"
+	@echo "  $(GREEN)proxmox-update$(NC)    - Update Proxmox via SSH"
+	@echo ""
 	@echo "$(YELLOW)Examples:$(NC)"
 	@echo "  make deploy-complete    # Complete automated deployment"
 	@echo "  make check              # Verify setup"
 	@echo "  make status-all         # Check all services"
+	@echo "  make proxmox-menu       # Proxmox management menu"
 
 # Verifica prerequisiti
 .PHONY: check
@@ -662,3 +671,216 @@ logs-services:
 	@cd $(ANSIBLE_DIR) && \
 	echo "$(YELLOW)Logs Docker Compose:$(NC)"; \
 	$(ANSIBLE) all -m shell -a "cd /opt/homelab && docker compose logs --tail=20" 2>/dev/null || echo "$(RED)Errore recupero logs$(NC)"
+
+# ================================================
+# GESTIONE PROXMOX VIA API
+# ================================================
+
+# Setup API Proxmox
+.PHONY: proxmox-api-setup
+proxmox-api-setup:
+	@echo "$(BLUE)=== Setup API Proxmox VE ===$(NC)"
+	@echo "$(YELLOW)Questo script ti guiderà nella configurazione dell'API$(NC)"
+	$(ANSIBLE_DIR)/scripts/setup-proxmox-api.sh
+
+# Status via API
+.PHONY: proxmox-api-status
+proxmox-api-status:
+	@echo "$(BLUE)=== Status Proxmox via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-management.yml --tags=status
+
+# Aggiornamento completo via API
+.PHONY: proxmox-api-update
+proxmox-api-update:
+	@echo "$(BLUE)=== Aggiornamento Proxmox via API ===$(NC)"
+	@echo "$(YELLOW)Aggiornamento completo usando API REST$(NC)"
+	@read -p "Confermi l'aggiornamento via API? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-update.yml; \
+	else \
+		echo "$(YELLOW)Aggiornamento annullato$(NC)"; \
+	fi
+
+# Manutenzione via API
+.PHONY: proxmox-api-maintenance
+proxmox-api-maintenance:
+	@echo "$(BLUE)=== Manutenzione Proxmox via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-maintenance.yml
+
+# Lista VMs via API
+.PHONY: proxmox-api-vms
+proxmox-api-vms:
+	@echo "$(BLUE)=== Lista VMs/Containers via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-management.yml --tags=vms
+
+# Storage status via API
+.PHONY: proxmox-api-storage
+proxmox-api-storage:
+	@echo "$(BLUE)=== Status Storage via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-management.yml --tags=storage
+
+# Tasks via API
+.PHONY: proxmox-api-tasks
+proxmox-api-tasks:
+	@echo "$(BLUE)=== Tasks Status via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-management.yml --tags=tasks
+
+# Cluster status via API
+.PHONY: proxmox-api-cluster
+proxmox-api-cluster:
+	@echo "$(BLUE)=== Cluster Status via API ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/proxmox-api-management.yml --tags=cluster
+
+# Test aggiornamento automatico via API
+.PHONY: proxmox-api-test-auto-update
+proxmox-api-test-auto-update:
+	@echo "$(BLUE)=== Test Aggiornamento Automatico via API ===$(NC)"
+	@if [ -f "$(ANSIBLE_DIR)/scripts/proxmox-api-auto-update.sh" ]; then \
+		echo "$(YELLOW)Esecuzione test script API...$(NC)"; \
+		sudo $(ANSIBLE_DIR)/scripts/proxmox-api-auto-update.sh; \
+	else \
+		echo "$(RED)Script API non trovato$(NC)"; \
+	fi
+
+# ================================================
+# GESTIONE PROXMOX (SSH - Legacy)
+# ================================================
+
+# Aggiornamento completo Proxmox
+.PHONY: proxmox-update
+proxmox-update:
+	@echo "$(BLUE)=== Aggiornamento Completo Proxmox ===$(NC)"
+	@echo "$(YELLOW)Questo processo eseguirà:$(NC)"
+	@echo "$(GREEN)1.$(NC) Backup configurazione"
+	@echo "$(GREEN)2.$(NC) Aggiornamento sistema"
+	@echo "$(GREEN)3.$(NC) Riavvio automatico (se necessario)"
+	@echo "$(GREEN)4.$(NC) Verifica servizi post-aggiornamento"
+	@echo ""
+	@read -p "Confermi l'aggiornamento completo di Proxmox? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/proxmox playbooks/proxmox-update.yml; \
+	else \
+		echo "$(YELLOW)Aggiornamento annullato$(NC)"; \
+	fi
+
+# Aggiornamento rapido Proxmox (senza riavvio)
+.PHONY: proxmox-quick-update
+proxmox-quick-update:
+	@echo "$(BLUE)=== Aggiornamento Rapido Proxmox ===$(NC)"
+	@echo "$(YELLOW)Aggiornamento pacchetti senza riavvio$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/proxmox playbooks/proxmox-quick-update.yml
+
+# Manutenzione Proxmox
+.PHONY: proxmox-maintenance
+proxmox-maintenance:
+	@echo "$(BLUE)=== Manutenzione e Pulizia Proxmox ===$(NC)"
+	@echo "$(YELLOW)Questo processo eseguirà:$(NC)"
+	@echo "$(GREEN)•$(NC) Pulizia log files"
+	@echo "$(GREEN)•$(NC) Rimozione kernel vecchi"
+	@echo "$(GREEN)•$(NC) Pulizia backup vecchi"
+	@echo "$(GREEN)•$(NC) Controllo stato servizi"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/proxmox playbooks/proxmox-maintenance.yml
+
+# Status Proxmox
+.PHONY: proxmox-status
+proxmox-status:
+	@echo "$(BLUE)=== Status Proxmox VE ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/proxmox playbooks/proxmox-management.yml --tags=status
+
+# Test connettività Proxmox
+.PHONY: proxmox-ping
+proxmox-ping:
+	@echo "$(BLUE)=== Test Connettività Proxmox ===$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE) -i inventories/proxmox proxmox -m ping
+
+# Menu gestione Proxmox
+.PHONY: proxmox-menu
+proxmox-menu:
+	@echo "$(BLUE)╔══════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(BLUE)║                    GESTIONE PROXMOX VE                       ║$(NC)"
+	@echo "$(BLUE)╚══════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🔗 API Management (Raccomandato):$(NC)"
+	@echo "$(GREEN) 1.$(NC) Setup API                   - make proxmox-api-setup"
+	@echo "$(GREEN) 2.$(NC) Status via API              - make proxmox-api-status"
+	@echo "$(GREEN) 3.$(NC) Aggiornamento via API       - make proxmox-api-update"
+	@echo "$(GREEN) 4.$(NC) Manutenzione via API        - make proxmox-api-maintenance"
+	@echo "$(GREEN) 5.$(NC) Lista VMs via API           - make proxmox-api-vms"
+	@echo "$(GREEN) 6.$(NC) Storage status via API      - make proxmox-api-storage"
+	@echo "$(GREEN) 7.$(NC) Test auto-update API        - make proxmox-api-test-auto-update"
+	@echo ""
+	@echo "$(YELLOW)🔧 SSH Management (Legacy):$(NC)"
+	@echo "$(GREEN) 8.$(NC) Status via SSH              - make proxmox-status"
+	@echo "$(GREEN) 9.$(NC) Aggiornamento via SSH       - make proxmox-update"
+	@echo "$(GREEN)10.$(NC) Manutenzione via SSH        - make proxmox-maintenance"
+	@echo "$(GREEN)11.$(NC) Setup auto-update SSH       - make proxmox-setup-auto-update"
+	@echo ""
+	@echo "$(YELLOW)Vantaggi API vs SSH:$(NC)"
+	@echo "  ✅ API: Più sicuro, non richiede accesso SSH root"
+	@echo "  ✅ API: Monitoraggio dettagliato task e progress"
+	@echo "  ✅ API: Accesso a tutte le funzionalità Proxmox"
+	@echo "  ⚠️  SSH: Accesso diretto ma meno sicuro"
+	@echo ""
+	@echo "$(YELLOW)Quick Start:$(NC)"
+	@echo "  1. make proxmox-api-setup     # Prima configurazione"
+	@echo "  2. make proxmox-api-status    # Test e stato"
+	@echo "  3. make proxmox-api-update    # Aggiornamento"
+
+# Setup aggiornamenti automatici
+.PHONY: proxmox-setup-auto-update
+proxmox-setup-auto-update:
+	@echo "$(BLUE)=== Setup Aggiornamenti Automatici Proxmox ===$(NC)"
+	@echo "$(YELLOW)Questo processo installerà:$(NC)"
+	@echo "$(GREEN)•$(NC) Script di aggiornamento automatico"
+	@echo "$(GREEN)•$(NC) Configurazione cron per esecuzione programmata"
+	@echo "$(GREEN)•$(NC) Sistema di notifiche email"
+	@echo "$(GREEN)•$(NC) Rotazione automatica dei log"
+	@echo ""
+	@read -p "Confermi l'installazione degli aggiornamenti automatici? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/setup-proxmox-auto-update.yml; \
+	else \
+		echo "$(YELLOW)Setup annullato$(NC)"; \
+	fi
+
+# Test aggiornamento automatico
+.PHONY: proxmox-test-auto-update
+proxmox-test-auto-update:
+	@echo "$(BLUE)=== Test Aggiornamento Automatico Proxmox ===$(NC)"
+	@if [ -f "$(ANSIBLE_DIR)/scripts/proxmox-auto-update.sh" ]; then \
+		echo "$(YELLOW)Esecuzione test script...$(NC)"; \
+		sudo $(ANSIBLE_DIR)/scripts/proxmox-auto-update.sh; \
+	else \
+		echo "$(RED)Script non trovato. Esegui prima: make proxmox-setup-auto-update$(NC)"; \
+	fi
+
+# Disabilita aggiornamenti automatici
+.PHONY: proxmox-disable-auto-update
+proxmox-disable-auto-update:
+	@echo "$(BLUE)=== Disabilita Aggiornamenti Automatici ===$(NC)"
+	@read -p "Confermi la disabilitazione degli aggiornamenti automatici? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		sudo rm -f /etc/cron.d/proxmox-auto-update; \
+		echo "$(GREEN)✓ Aggiornamenti automatici disabilitati$(NC)"; \
+	else \
+		echo "$(YELLOW)Operazione annullata$(NC)"; \
+	fi
+
+# Visualizza log aggiornamenti automatici
+.PHONY: proxmox-auto-update-logs
+proxmox-auto-update-logs:
+	@echo "$(BLUE)=== Log Aggiornamenti Automatici ===$(NC)"
+	@if [ -d "/var/log/proxmox-auto-update" ]; then \
+		echo "$(YELLOW)Log files disponibili:$(NC)"; \
+		ls -la /var/log/proxmox-auto-update/; \
+		echo ""; \
+		echo "$(YELLOW)Ultimo log:$(NC)"; \
+		LATEST_LOG=$$(ls -t /var/log/proxmox-auto-update/auto-update-*.log 2>/dev/null | head -1); \
+		if [ ! -z "$$LATEST_LOG" ]; then \
+			tail -20 "$$LATEST_LOG"; \
+		else \
+			echo "$(YELLOW)Nessun log trovato$(NC)"; \
+		fi; \
+	else \
+		echo "$(RED)Directory log non trovata. Esegui prima: make proxmox-setup-auto-update$(NC)"; \
+	fi

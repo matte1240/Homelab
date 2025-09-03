@@ -1,0 +1,171 @@
+---
+- name: Proxmox VE Maintenance and Cleanup
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  vars_files:
+    - ../secrets.yml
+
+  tasks:
+    - name: Display maintenance information
+      ansible.builtin.debug:
+        msg:
+          - "🧹 Proxmox VE Maintenance and Cleanup"
+          - "Target host: {{ inventory_hostname }}"
+          - "Current time: {{ ansible_date_time.iso8601 }}"
+
+    - name: Check current Proxmox version
+      ansible.builtin.shell: pveversion
+      register: proxmox_version
+      changed_when: false
+
+    - name: Display current version
+      ansible.builtin.debug:
+        msg: "Current Proxmox version: {{ proxmox_version.stdout }}"
+
+    - name: Check disk usage
+      ansible.builtin.shell: df -h
+      register: disk_usage
+      changed_when: false
+
+    - name: Display disk usage
+      ansible.builtin.debug:
+        msg: "{{ disk_usage.stdout_lines }}"
+
+    # System cleanup tasks
+    - name: Clean package cache
+      ansible.builtin.apt:
+        autoclean: true
+        autoremove: true
+
+    - name: Remove old kernels (keep current and one previous)
+      ansible.builtin.shell: |
+        apt-get -y autoremove --purge $(dpkg -l 'linux-*' | sed '/^ii/!d;/'"$(uname -r | sed "s/\(.*\)-\([^0-9]\+\)/\1/")"'/d;s/^[^ ]* [^ ]* \([^ ]*\).*/\1/;/[0-9]/!d' | head -n -1) || true
+      register: kernel_cleanup
+      changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in kernel_cleanup.stdout"
+
+    # Proxmox specific cleanup
+    - name: Clean Proxmox logs older than 30 days
+      ansible.builtin.find:
+        paths:
+          - /var/log/pve
+          - /var/log/pve-firewall
+        age: 30d
+        recurse: true
+      register: old_logs
+
+    - name: Remove old log files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_logs.files }}"
+      when: old_logs.files | length > 0
+
+    - name: Clean journal logs (keep last 30 days)
+      ansible.builtin.shell: journalctl --vacuum-time=30d
+      register: journal_cleanup
+      changed_when: "'Deleted archived journal' in journal_cleanup.stdout"
+
+    - name: Rotate log files
+      ansible.builtin.shell: logrotate -f /etc/logrotate.conf
+      ignore_errors: true
+
+    # VM/Container backup cleanup (if using vzdump)
+    - name: Find old backup files
+      ansible.builtin.find:
+        paths: /var/lib/vz/dump
+        age: 7d
+        patterns: "*.vma.gz,*.tar.gz,*.tar.lzo,*.tar.zst"
+      register: old_backups
+      ignore_errors: true
+
+    - name: Display old backups found
+      ansible.builtin.debug:
+        msg: "Found {{ old_backups.files | length }} old backup files to remove"
+      when: old_backups.files is defined
+
+    - name: Remove old backup files (older than 7 days)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: 
+        - old_backups.files is defined
+        - old_backups.files | length > 0
+
+    # Check and clean LVM snapshots
+    - name: Check for LVM snapshots
+      ansible.builtin.shell: lvs -o lv_name,lv_attr | grep -E "^\s+.*snap" || true
+      register: lvm_snapshots
+      changed_when: false
+
+    - name: Display LVM snapshots
+      ansible.builtin.debug:
+        msg: "LVM Snapshots: {{ lvm_snapshots.stdout_lines }}"
+      when: lvm_snapshots.stdout != ""
+
+    # Storage cleanup
+    - name: Check for unused ISO files
+      ansible.builtin.find:
+        paths: /var/lib/vz/template/iso
+        age: 90d
+        size: "+100M"
+      register: old_isos
+
+    - name: Display old ISO files
+      ansible.builtin.debug:
+        msg: "Found {{ old_isos.files | length }} old ISO files (older than 90 days, larger than 100MB)"
+
+    # Check Proxmox cluster status (if applicable)
+    - name: Check cluster status
+      ansible.builtin.shell: pvecm status || echo "Not in cluster"
+      register: cluster_status
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display cluster status
+      ansible.builtin.debug:
+        msg: "{{ cluster_status.stdout_lines }}"
+
+    # Check storage status
+    - name: Check Proxmox storage status
+      ansible.builtin.shell: pvesm status
+      register: storage_status
+      changed_when: false
+
+    - name: Display storage status
+      ansible.builtin.debug:
+        msg: "{{ storage_status.stdout_lines }}"
+
+    # Check running VMs/Containers
+    - name: List running VMs and Containers
+      ansible.builtin.shell: qm list && pct list
+      register: vm_list
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display running VMs/Containers
+      ansible.builtin.debug:
+        msg: "{{ vm_list.stdout_lines }}"
+
+    # Final disk usage check
+    - name: Check disk usage after cleanup
+      ansible.builtin.shell: df -h
+      register: final_disk_usage
+      changed_when: false
+
+    - name: Display final disk usage
+      ansible.builtin.debug:
+        msg: "{{ final_disk_usage.stdout_lines }}"
+
+    - name: Display maintenance summary
+      ansible.builtin.debug:
+        msg:
+          - "🧹 MAINTENANCE COMPLETED"
+          - "Host: {{ inventory_hostname }}"
+          - "Proxmox version: {{ proxmox_version.stdout }}"
+          - "Completion time: {{ ansible_date_time.iso8601 }}"
+          - "Cleaned log files: {{ old_logs.files | length if old_logs.files is defined else 0 }}"
+          - "Removed backups: {{ old_backups.files | length if old_backups.files is defined else 0 }}"
+          - "Journal cleanup: {{ 'Yes' if journal_cleanup.changed else 'No' }}"
