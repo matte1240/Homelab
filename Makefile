@@ -21,7 +21,7 @@ NC := \033[0m # No Color
 
 # Template disponibili
 UBUNTU_TEMPLATE := $(PACKER_DIR)/ubuntu-server-noble
-DEBIAN_TRIXIE_TEMPLATE := $(PACKER_DIR)/debian-server-trixie
+DEBIAN_TEMPLATE := $(PACKER_DIR)/debian-server-trixie
 
 # Target predefinito
 .DEFAULT_GOAL := help
@@ -29,63 +29,24 @@ DEBIAN_TRIXIE_TEMPLATE := $(PACKER_DIR)/debian-server-trixie
 # Aiuto
 .PHONY: help
 help:
-	@echo "$(BLUE)=== Makefile Homelab Proxmox ===$(NC)"
+	@echo "$(BLUE)=== Homelab Makefile ===$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Target principali:$(NC)"
-	@echo "  $(GREEN)help$(NC)                    - Mostra questo aiuto"
-	@echo "  $(GREEN)check$(NC)                   - Verifica prerequisiti e configurazione"
-	@echo "  $(GREEN)clean$(NC)                   - Pulisce file temporanei e cache"
-	@echo "  $(GREEN)clean-all$(NC)               - Pulizia completa (include terraform)"
+	@echo "$(YELLOW)Main Commands:$(NC)"
+	@echo "  $(GREEN)deploy-complete$(NC)  - Full automated deployment (recommended)"
+	@echo "  $(GREEN)check$(NC)            - Verify prerequisites"
+	@echo "  $(GREEN)status-all$(NC)       - Show complete homelab status"
+	@echo "  $(GREEN)clean$(NC)            - Clean temporary files"
 	@echo ""
-	@echo "$(YELLOW)Packer Templates:$(NC)"
-	@echo "  $(GREEN)validate-all$(NC)            - Valida tutti i template"
-	@echo "  $(GREEN)build-all$(NC)               - Costruisce tutti i template"
-	@echo "  $(GREEN)validate-ubuntu$(NC)         - Valida template Ubuntu Noble"
-	@echo "  $(GREEN)build-ubuntu$(NC)            - Costruisce template Ubuntu Noble"
-	@echo "  $(GREEN)validate-debian-trixie$(NC)  - Valida template Debian Trixie"
-	@echo "  $(GREEN)build-debian-trixie$(NC)     - Costruisce template Debian Trixie"
+	@echo "$(YELLOW)Build & Deploy:$(NC)"
+	@echo "  $(GREEN)build-all$(NC)        - Build all Packer templates"
+	@echo "  $(GREEN)terraform-apply$(NC)  - Apply Terraform configuration"
+	@echo "  $(GREEN)deploy-production$(NC) - Deploy to production environment"
+	@echo "  $(GREEN)deploy-development$(NC) - Deploy to development environment"
 	@echo ""
-	@echo "$(YELLOW)Terraform Infrastructure:$(NC)"
-	@echo "  $(GREEN)terraform-init$(NC)          - Inizializza Terraform"
-	@echo "  $(GREEN)terraform-plan$(NC)          - Mostra plan Terraform"
-	@echo "  $(GREEN)terraform-apply$(NC)         - Applica configurazione"
-	@echo "  $(GREEN)terraform-destroy$(NC)       - Distrugge infrastruttura"
-	@echo "  $(GREEN)terraform-status$(NC)        - Mostra stato infrastruttura"
-	@echo "  $(GREEN)terraform-validate$(NC)      - Valida configurazione Terraform"
-	@echo "  $(GREEN)terraform-fmt$(NC)           - Formatta file Terraform"
-	@echo "  $(GREEN)clean-terraform$(NC)         - Pulisce solo file Terraform"
-	@echo ""
-	@echo "$(YELLOW)Ansible Configuration:$(NC)"
-	@echo "  $(GREEN)ansible-check$(NC)           - Verifica configurazione Ansible"
-	@echo "  $(GREEN)ansible-ping$(NC)            - Testa connettività agli host"
-	@echo "  $(GREEN)ansible-deploy$(NC)          - Esegue playbook principale"
-	@echo "  $(GREEN)ansible-deploy-staging$(NC)  - Deploy su ambiente staging"
-	@echo "  $(GREEN)ansible-docker-compose$(NC)  - Installa Docker Compose su Ubuntu VM"
-	@echo "  $(GREEN)ansible-pihole$(NC)          - Deploy Pi-hole + Unbound DNS stack"
-	@echo "  $(GREEN)ansible-lint$(NC)            - Analizza playbook con ansible-lint"
-	@echo "  $(GREEN)ansible-vault-edit$(NC)      - Modifica vault per secrets"
-	@echo ""
-	@echo "$(YELLOW)Monitoraggio e Troubleshooting:$(NC)"
-	@echo "  $(GREEN)status-all$(NC)              - Status completo homelab (template, VM, servizi)"
-	@echo "  $(GREEN)test-connectivity$(NC)       - Test connettività completo"
-	@echo "  $(GREEN)logs-services$(NC)           - Mostra logs servizi Docker"
-	@echo "  $(GREEN)reset-all$(NC)               - Reset completo (DISTRUTTIVO!)"
-	@echo ""
-	@echo "$(YELLOW)Utilità:$(NC)"
-	@echo "  $(GREEN)show-ips$(NC)                - Mostra configurazione IP"
-	@echo "  $(GREEN)dev-check$(NC)               - Controlli di sviluppo"
-	@echo ""
-	@echo "$(YELLOW)Deploy Automatizzato:$(NC)"
-	@echo "  $(GREEN)deploy-complete$(NC)         - Deploy completo automatizzato (Packer + Terraform + Ansible)"
-	@echo "  $(GREEN)check-templates$(NC)         - Verifica template Packer su Proxmox"
-	@echo "  $(GREEN)ensure-templates$(NC)        - Garantisce presenza template necessari"
-	@echo ""
-	@echo "$(YELLOW)Esempi:$(NC)"
-	@echo "  make check                    # Verifica prerequisiti"
-	@echo "  make deploy-complete          # Deploy automatizzato completo"
-	@echo "  make build-ubuntu             # Costruisce solo Ubuntu"
-	@echo "  make terraform-plan           # Mostra piano terraform"
-	@echo "  PACKER_LOG=1 make build-all  # Build con log dettagliati"
+	@echo "$(YELLOW)Examples:$(NC)"
+	@echo "  make deploy-complete    # Complete automated deployment"
+	@echo "  make check              # Verify setup"
+	@echo "  make status-all         # Check all services"
 
 # Verifica prerequisiti
 .PHONY: check
@@ -492,11 +453,11 @@ ansible-check:
 	else \
 		echo "$(RED)✗ File ansible.cfg mancante$(NC)"; exit 1; \
 	fi
-	@echo -n "$(YELLOW)Checking inventory...$(NC) "
-	@if [ -f "$(ANSIBLE_DIR)/inventories/production/hosts.yml" ]; then \
-		echo "$(GREEN)✓ Inventory production trovato$(NC)"; \
+	@echo -n "$(YELLOW)Checking inventories...$(NC) "
+	@if [ -f "$(ANSIBLE_DIR)/inventories/production/hosts" ] && [ -f "$(ANSIBLE_DIR)/inventories/dev/hosts" ]; then \
+		echo "$(GREEN)✓ Inventories trovati$(NC)"; \
 	else \
-		echo "$(RED)✗ Inventory production mancante$(NC)"; exit 1; \
+		echo "$(RED)✗ Inventories mancanti$(NC)"; exit 1; \
 	fi
 	@echo "$(GREEN)Configurazione Ansible verificata$(NC)"
 
@@ -511,23 +472,49 @@ ansible-ping-staging:
 	@echo "$(BLUE)=== Test Connettività Staging ===$(NC)"
 	cd $(ANSIBLE_DIR) && $(ANSIBLE) -i inventories/staging/hosts.yml all -m ping
 
-# Deploy playbook principale
+# Deploy playbook principale (entrambi gli ambienti)
 .PHONY: ansible-deploy
 ansible-deploy: ansible-check
-	@echo "$(BLUE)=== Deploy Ansible Production ===$(NC)"
-	@echo "$(YELLOW)Attenzione: Questa operazione configurerà i server in produzione!$(NC)"
-	@read -p "Confermi il deploy? (y/N): " confirm; \
+	@echo "$(BLUE)=== Deploy Ansible su Entrambi gli Ambienti ===$(NC)"
+	@echo "$(YELLOW)Attenzione: Questa operazione configurerà entrambi i server!$(NC)"
+	@read -p "Confermi il deploy su PRODUCTION e DEVELOPMENT? (y/N): " confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
-		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/site.yml; \
+		$(MAKE) deploy-production && $(MAKE) deploy-development; \
 	else \
 		echo "$(YELLOW)Operazione annullata$(NC)"; \
 	fi
 
-# Deploy ambiente staging
+# Deploy solo production
+.PHONY: deploy-production
+deploy-production: ansible-check
+	@echo "$(BLUE)=== 🟢 Deploy PRODUCTION Environment ===$(NC)"
+	@echo "$(GREEN)Target: VM-01 (192.168.178.20) - prod.matteobaracetti.com$(NC)"
+	@read -p "Confermi il deploy in PRODUCTION? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/production/hosts playbooks/homelab-stack.yml; \
+	else \
+		echo "$(YELLOW)Deploy production annullato$(NC)"; \
+	fi
+
+# Deploy solo development
+.PHONY: deploy-development
+deploy-development: ansible-check
+	@echo "$(BLUE)=== 🟡 Deploy DEVELOPMENT Environment ===$(NC)"
+	@echo "$(YELLOW)Target: VM-02 (192.168.178.21) - dev.matteobaracetti.com$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/dev/hosts playbooks/homelab-stack.yml
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml -e "target_env=production"
+
+# Deploy solo development
+.PHONY: deploy-development  
+deploy-development: ansible-check
+	@echo "$(BLUE)=== 🟡 Deploy DEVELOPMENT Environment ===$(NC)"
+	@echo "$(YELLOW)Target: VM-02 (192.168.178.21) - dev.matteobaracetti.com$(NC)"
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/homelab-stack.yml -e "target_env=development"
+
+# Deploy staging (retrocompatibilità)
 .PHONY: ansible-deploy-staging
-ansible-deploy-staging:
-	@echo "$(BLUE)=== Deploy Ansible Staging ===$(NC)"
-	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) -i inventories/staging/hosts.yml playbooks/site.yml
+ansible-deploy-staging: deploy-development
+	@echo "$(YELLOW)Nota: ansible-deploy-staging è ora alias per deploy-development$(NC)"
 
 # Lint playbooks
 .PHONY: ansible-lint
@@ -582,13 +569,32 @@ status-all:
 	@$(MAKE) terraform-status 2>/dev/null || echo "$(RED)Terraform non inizializzato$(NC)"
 	@echo ""
 	@echo "$(YELLOW)⚙️  SERVIZI ANSIBLE:$(NC)"
-	@cd $(ANSIBLE_DIR) && if $(ANSIBLE) all -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
-		echo "$(GREEN)✓ Host raggiungibili$(NC)"; \
-		echo "$(YELLOW)Servizi attivi:$(NC)"; \
-		$(ANSIBLE) all -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null || echo "$(YELLOW)Docker non disponibile$(NC)"; \
+	@$(MAKE) status-production
+	@$(MAKE) status-development
+
+# Status ambiente production
+.PHONY: status-production
+status-production:
+	@echo "$(GREEN)🟢 PRODUCTION STATUS (VM-01):$(NC)"
+	@cd $(ANSIBLE_DIR) && if $(ANSIBLE) -i inventories/production/hosts production -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
+		echo "$(GREEN)  ✓ Host raggiungibile$(NC)"; \
+		$(ANSIBLE) -i inventories/production/hosts production -m shell -a "docker ps" 2>/dev/null | sed '1d' || echo "$(RED)  ✗ Errore Docker$(NC)"; \
 	else \
-		echo "$(RED)✗ Host non raggiungibili$(NC)"; \
+		echo "$(RED)  ✗ Host non raggiungibile$(NC)"; \
 	fi
+	@echo ""
+
+# Status ambiente development
+.PHONY: status-development
+status-development:
+	@echo "$(YELLOW)🟡 DEVELOPMENT STATUS (VM-02):$(NC)"
+	@cd $(ANSIBLE_DIR) && if $(ANSIBLE) -i inventories/dev/hosts development -m ping --one-line 2>/dev/null | grep -q "SUCCESS"; then \
+		echo "$(GREEN)  ✓ Host raggiungibile$(NC)"; \
+		$(ANSIBLE) -i inventories/dev/hosts development -m shell -a "docker ps" 2>/dev/null | sed '1d' || echo "$(RED)  ✗ Errore Docker$(NC)"; \
+	else \
+		echo "$(RED)  ✗ Host non raggiungibile$(NC)"; \
+	fi
+	@echo ""
 
 # Reset completo (attenzione!)
 .PHONY: reset-all

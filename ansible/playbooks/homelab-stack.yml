@@ -1,8 +1,8 @@
 ---
 - name: Setup Ubuntu System and Deploy Homelab Stack
-  hosts: docker_hosts
-  become: yes
-  gather_facts: yes
+  hosts: "{{ target_env | default('production') }}"
+  become: true
+  gather_facts: true
   
   # Caricare le variabili sensibili da file separato
   vars_files:
@@ -10,6 +10,14 @@
   
   # Integrare la configurazione del sistema Ubuntu prima del deploy
   pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Deploying to environment: {{ env_name }}"
+          - "Target host: {{ inventory_hostname }}"
+          - "Domain: {{ domain_name }}"
+          - "Traefik log level: {{ traefik_log_level }}"
+    
     - name: Include Ubuntu system configuration
       include_role:
         name: ubuntu-system-config
@@ -19,7 +27,7 @@
         name: docker_install
         
     - name: Create application directory
-      file:
+      ansible.builtin.file:
         path: "{{ app_directory }}"
         state: directory
         owner: "{{ ansible_user }}"
@@ -27,7 +35,7 @@
         mode: '0755'
 
     - name: Create Traefik configuration directory
-      file:
+      ansible.builtin.file:
         path: "{{ app_directory }}/traefik"
         state: directory
         owner: "{{ ansible_user }}"
@@ -35,15 +43,23 @@
         mode: '0755'
 
     - name: Generate Traefik configuration from template
-      template:
+      ansible.builtin.template:
         src: traefik.yml.j2
         dest: "{{ app_directory }}/traefik/traefik.yml"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
 
+    - name: Generate Traefik dynamic configuration from template
+      ansible.builtin.template:
+        src: dynamic.yml.j2
+        dest: "{{ app_directory }}/traefik/dynamic.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
     - name: Create Traefik environment file with Cloudflare credentials
-      copy:
+      ansible.builtin.copy:
         dest: "{{ app_directory }}/traefik/.env"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
@@ -51,10 +67,22 @@
         content: |
           # Cloudflare configuration for Let's Encrypt DNS challenge
           CLOUDFLARE_EMAIL={{ cloudflare_email }}
-          CLOUDFLARE_DNS_API_TOKEN={{ cloudflare_dns_api_token }}
+          CLOUDFLARE_DNS_API_TOKEN={{ cloudflare_api_token }}
+      when: ssl_enabled | default(false) | bool
+
+    - name: Create empty Traefik environment file for non-SSL deployments
+      ansible.builtin.copy:
+        dest: "{{ app_directory }}/traefik/.env"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+        content: |
+          # No SSL configuration needed for development
+          # Add any other environment variables here if needed
+      when: not (ssl_enabled | default(false) | bool)
 
     - name: Create unbound configuration directory
-      file:
+      ansible.builtin.file:
         path: "{{ app_directory }}/unbound"
         state: directory
         owner: "{{ ansible_user }}"
@@ -62,7 +90,7 @@
         mode: '0755'
 
     - name: Create unbound configuration file
-      copy:
+      ansible.builtin.copy:
         dest: "{{ app_directory }}/unbound/unbound.conf"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
@@ -114,9 +142,6 @@
     app_directory: /opt/homelab
     network_subnet: "172.21.0.0/16"
     
-    # Domain configuration
-    domain_name: mb.home  # Using nip.io for local domain resolution
-    
     # Create necessary directories and volumes
     compose_volumes:
       - name: traefik_data
@@ -128,12 +153,15 @@
       - name: uptime_kuma_data
         driver: local
 
-    compose_services:
-      # Traefik - Reverse Proxy
+    compose_services: "{{ homelab_services | selectattr('enabled', 'equalto', true) | list }}"
+    
+    # Define all possible services with conditional deployment
+    homelab_services:
       - name: traefik
+        enabled: "{{ deploy_traefik | default(true) }}"
         image: traefik:v3.0
         container_name: traefik
-        restart: unless-stopped
+        restart: "{{ restart_policy | default('unless-stopped') }}"
         ports:
           - "80:80"
           - "443:443"
@@ -142,6 +170,7 @@
           - "/var/run/docker.sock:/var/run/docker.sock:ro"
           - "traefik_data:/data"
           - "{{ app_directory }}/traefik/traefik.yml:/etc/traefik/traefik.yml:ro"
+          - "{{ app_directory }}/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro"
         env_file:
           - "{{ app_directory }}/traefik/.env"
         security_opt:
@@ -149,14 +178,17 @@
         labels:
           traefik.enable: "true"
           traefik.http.routers.traefik-dashboard.rule: "Host(`traefik.{{ domain_name }}`)"
-          traefik.http.routers.traefik-dashboard.entrypoints: "http"
+          traefik.http.routers.traefik-dashboard.entrypoints: "{{ 'https' if ssl_enabled | default(false) else 'http' }}"
+          traefik.http.routers.traefik-dashboard.service: "api@internal"
+          traefik.http.routers.traefik-dashboard.tls: "{{ 'true' if ssl_enabled | default(false) else 'false' }}"
+          traefik.http.routers.traefik-dashboard.tls.certresolver: "{{ 'letsencrypt' if ssl_enabled | default(false) else '' }}"
           traefik.http.services.traefik-dashboard.loadbalancer.server.port: "8080"
 
-      # Unbound DNS Server
       - name: unbound
+        enabled: "{{ deploy_unbound | default(true) }}"
         image: mvance/unbound:latest
         container_name: unbound
-        restart: unless-stopped
+        restart: "{{ restart_policy | default('unless-stopped') }}"
         ports:
           - "5353:53/tcp"
           - "5353:53/udp"
@@ -169,11 +201,11 @@
         labels:
           traefik.enable: "false"
 
-      # Pi-hole DNS Ad-blocker
       - name: pihole
+        enabled: "{{ deploy_pihole | default(true) }}"
         image: pihole/pihole:latest
         container_name: pihole
-        restart: unless-stopped
+        restart: "{{ restart_policy | default('unless-stopped') }}"
         ports:
           - "53:53/tcp"
           - "53:53/udp"
@@ -182,10 +214,9 @@
           - "pihole_dnsmasq:/etc/dnsmasq.d"
         environment:
           TZ: "Europe/Rome"
-          # Pi-hole v6 configuration using FTLCONF_ prefix
           FTLCONF_webserver_api_password: "{{ pihole_webpassword }}"
-          FTLCONF_dns_upstreams: "unbound#53"  # Unbound DNS server (internal Docker network port 53)
-          FTLCONF_dns_listeningMode: "all"  # Required for Docker bridge network
+          FTLCONF_dns_upstreams: "unbound#53"
+          FTLCONF_dns_listeningMode: "all"
           FTLCONF_dns_dnssec: "true"
           FTLCONF_webserver_cors_hosts: "pihole.{{ domain_name }}"
           VIRTUAL_HOST: "pihole.{{ domain_name }}"
@@ -199,14 +230,16 @@
         labels:
           traefik.enable: "true"
           traefik.http.routers.pihole.rule: "Host(`pihole.{{ domain_name }}`)"
-          traefik.http.routers.pihole.entrypoints: "http"
+          traefik.http.routers.pihole.entrypoints: "{{ 'https' if ssl_enabled | default(false) else 'http' }}"
+          traefik.http.routers.pihole.tls: "{{ 'true' if ssl_enabled | default(false) else 'false' }}"
+          traefik.http.routers.pihole.tls.certresolver: "{{ 'letsencrypt' if ssl_enabled | default(false) else '' }}"
           traefik.http.services.pihole.loadbalancer.server.port: "80"
 
-      # Uptime Kuma - Monitoring
       - name: uptime-kuma
+        enabled: "{{ deploy_uptime_kuma | default(true) }}"
         image: louislam/uptime-kuma:1
         container_name: uptime-kuma
-        restart: unless-stopped
+        restart: "{{ restart_policy | default('unless-stopped') }}"
         volumes:
           - "uptime_kuma_data:/app/data"
         environment:
@@ -216,7 +249,9 @@
         labels:
           traefik.enable: "true"
           traefik.http.routers.uptime-kuma.rule: "Host(`uptime.{{ domain_name }}`)"
-          traefik.http.routers.uptime-kuma.entrypoints: "http"
+          traefik.http.routers.uptime-kuma.entrypoints: "{{ 'https' if ssl_enabled | default(false) else 'http' }}"
+          traefik.http.routers.uptime-kuma.tls: "{{ 'true' if ssl_enabled | default(false) else 'false' }}"
+          traefik.http.routers.uptime-kuma.tls.certresolver: "{{ 'letsencrypt' if ssl_enabled | default(false) else '' }}"
           traefik.http.services.uptime-kuma.loadbalancer.server.port: "3001"
 
   roles:
@@ -225,16 +260,48 @@
 
   post_tasks:
     - name: Display service URLs
+      ansible.builtin.debug:
+        msg:
+          - "🎯 {{ env_name | upper }} ENVIRONMENT DEPLOYED"
+          - "🌐 Domain: {{ domain_name }}"
+          - ""
+          - "🚀 Services Available:"
+          - "  • Traefik Dashboard: http://{{ ansible_host }}:8081"
+          - "  • Traefik Dashboard (via proxy): {{ 'https' if ssl_enabled | default(false) else 'http' }}://traefik.{{ domain_name }}"
+          - "  • Uptime Kuma: {{ 'https' if ssl_enabled | default(false) else 'http' }}://uptime.{{ domain_name }}"
+          - ""
+
+    - name: Display Pi-hole information
       debug:
         msg:
-          - "Traefik Dashboard: http://{{ ansible_host }}:8081"
-          - "Traefik Dashboard (via proxy): http://traefik.{{ domain_name }}"
-          - "Pi-hole Admin: http://pihole.{{ domain_name }}"
-          - "Uptime Kuma: http://uptime.{{ domain_name }}"
+          - "  • Pi-hole Admin: {{ 'https' if ssl_enabled | default(false) else 'http' }}://pihole.{{ domain_name }}"
           - ""
-          - "DNS Configuration:"
-          - "Primary DNS: {{ ansible_host }}"
-          - "Pi-hole Web Password: {{ pihole_webpassword }}"
+          - "🔧 DNS Configuration:"
+          - "  Primary DNS: {{ ansible_host }}"
+          - "  Pi-hole Web Password: {{ pihole_webpassword }}"
           - ""
-          - "To configure clients to use Pi-hole DNS:"
-          - "Set DNS server to {{ ansible_host }} in your router or device settings"
+          - "📋 To configure clients to use Pi-hole DNS:"
+          - "  Set DNS server to {{ ansible_host }} in your router or device settings"
+      when: deploy_pihole | default(true)
+
+    - name: Display Proxmox information
+      debug:
+        msg:
+          - "  • Proxmox VE: https://pve.{{ domain_name }}"
+      when: deploy_proxmox_routes | default(false)
+
+    - name: Display SSL information
+      debug:
+        msg:
+          - "🔒 SSL/TLS Status: ENABLED with Let's Encrypt certificates"
+          - "   All services accessible via HTTPS with valid certificates"
+      when: ssl_enabled | default(false)
+
+    - name: Display development notice
+      debug:
+        msg:
+          - "ℹ️  Development environment - Pi-hole/Unbound not deployed"
+          - "   This environment is optimized for testing and development"
+      when: 
+        - env_name == "development"
+        - not (deploy_pihole | default(true))

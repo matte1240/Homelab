@@ -1,7 +1,21 @@
-# Configurazione completa Traefik in un singolo file
+# Configurazione Traefik per ambiente {{ env_name | default('unknown') }}
 api:
   dashboard: true
   insecure: true
+
+# Logging configuration based on environment
+log:
+  level: "{{ traefik_log_level | default('INFO') }}"
+{% if env_name == 'development' and enable_debug_endpoints | default(false) %}
+  filePath: "/data/traefik.log"
+{% endif %}
+
+# Access logs for production monitoring
+{% if env_name == 'production' and enable_monitoring | default(false) %}
+accessLog:
+  filePath: "/data/access.log"
+  bufferingSize: 100
+{% endif %}
 
 entryPoints:
   http:
@@ -13,8 +27,12 @@ providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
 
-# Certificati SSL con Cloudflare
+{% if ssl_enabled | default(false) and env_name == 'production' %}
+# Certificati SSL con Cloudflare (solo produzione)
 certificatesResolvers:
   letsencrypt:
     acme:
@@ -27,38 +45,6 @@ certificatesResolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"
 
-# Configurazione dinamica inline
-http:
-  # Global redirect to https
-  routers:
-    http-catchall:
-      rule: "hostregexp(`{host:.+}`)"
-      entryPoints:
-        - http
-      middlewares:
-        - redirect-to-https
-      service: api@internal
-  
-  middlewares:
-    redirect-to-https:
-      redirectScheme:
-        scheme: https
-        permanent: true
-    
-    # Headers per Proxmox
-    proxmox-headers:
-      headers:
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
-          X-Real-IP: "192.168.178.22"
-          X-Forwarded-For: "192.168.178.22"
-          X-Forwarded-Host: "pve.dev.matteobaracetti.com"
-
-  serversTransports:
-    insecure-transport:
-      serverName: ""
-      insecureSkipVerify: true
-
 # TLS Options
 tls:
   options:
@@ -69,3 +55,4 @@ tls:
         - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
         - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
         - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+{% endif %}

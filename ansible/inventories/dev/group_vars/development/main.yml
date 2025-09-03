@@ -1,0 +1,36 @@
+---
+# Development Environment Configuration
+environment: "development"
+domain_name: "dev.matteobaracetti.com"
+
+# Development-specific settings
+traefik_log_level: "DEBUG"
+enable_monitoring: false
+restart_policy: "no"
+
+# Service deployment flags (more flexible for development)
+deploy_traefik: true
+deploy_pihole: false  # No need for DNS in dev environment
+deploy_unbound: false # No need for unbound in dev
+deploy_uptime_kuma: true
+
+# Development SSL/TLS (disabled for faster testing)
+ssl_enabled: false
+lets_encrypt_enabled: false
+
+# Resource limits (development can use less resources)
+traefik_memory_limit: "256m"
+pihole_memory_limit: "128m"
+uptime_kuma_memory_limit: "128m"
+
+# No backup needed in dev
+enable_backup: false
+backup_retention_days: 7
+
+# Security (relaxed for development)
+security_headers_enabled: false
+rate_limiting_enabled: false
+
+# Development-specific features
+enable_debug_endpoints: true
+allow_insecure_connections: false

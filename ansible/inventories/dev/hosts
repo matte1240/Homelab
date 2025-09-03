@@ -1,8 +1,8 @@
-[docker_hosts]
-ubuntu-vm-01 ansible_host=192.168.178.20 ansible_user=ubuntu
+[development]
 ubuntu-vm-02 ansible_host=192.168.178.21 ansible_user=ubuntu
 
-[docker_hosts:vars]
+[development:vars]
 ansible_ssh_private_key_file=~/.ssh/id_rsa
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 ansible_python_interpreter=/usr/bin/python3
+environment=development

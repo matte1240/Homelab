@@ -1,4 +1,6 @@
 # Terraform configuration for Proxmox VE
+# Following HashiCorp best practices for infrastructure as code
+
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -11,9 +13,9 @@ terraform {
 
 # Configure the Proxmox Provider
 provider "proxmox" {
-  endpoint = var.proxmox_api_url
+  endpoint  = var.proxmox_api_url
   api_token = "${var.proxmox_token_id}=${var.proxmox_token_secret}"
-  insecure = true
+  insecure  = true
 }
 
 # Create Ubuntu VMs with incremental IDs and IPs
@@ -28,12 +30,12 @@ resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
     vm_id = var.ubuntu_template_id
   }
   
-  # Agent
+  # Enable QEMU guest agent
   agent {
     enabled = true
   }
   
-  # CPU and Memory
+  # CPU and Memory configuration
   cpu {
     cores = var.vm_cores
   }
@@ -42,13 +44,13 @@ resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
     dedicated = var.vm_memory
   }
   
-  # Network configuration
+  # Network configuration with virtio driver
   network_device {
     bridge = var.network_bridge
     model  = "virtio"
   }
   
-  # Cloud-init configuration
+  # Cloud-init configuration for automated setup
   initialization {
     datastore_id = var.storage_pool
     

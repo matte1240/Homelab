@@ -1,47 +1,62 @@
 ---
 # Production Environment Configuration
-environment: production
-compose_project_name: myapp_prod
-app_directory: /opt/myapp
-network_subnet: "172.30.0.0/16"
 
-# Production settings
-compose_pull_policy: always
+# Docker Compose settings
+compose_project_name: homelab-production
+compose_build: false
+compose_pull: true
 compose_recreate: auto
+compose_state: present
+compose_wait_timeout: 300
 
-# Production security-focused configuration
-compose_services:
-  - name: web
-    image: "nginx:1.25-alpine"
-    user: "101:101"  # nginx user
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx:noexec,nosuid,size=50m
-      - /var/run:noexec,nosuid,size=10m
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETGID
-      - SETUID
-    security_opt:
-      - no-new-privileges:true
-    ports:
-      - "80:8080"
-    environment:
-      ENVIRONMENT: production
-    volumes:
-      - "{{ app_directory }}/html:/usr/share/nginx/html:ro"
-      - "{{ app_directory }}/nginx.conf:/etc/nginx/nginx.conf:ro"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+# App settings
+app_user: ubuntu
+app_group: ubuntu
+hide_sensitive_logs: true
+
+# Environment specific settings
+env_name: production
+domain_name: prod.matteobaracetti.com
+ssl_enabled: true
+traefik_log_level: INFO
+
+# Service deployment flags
+deploy_traefik: true
+deploy_pihole: true
+deploy_unbound: true
+deploy_uptime_kuma: true
+deploy_proxmox_routes: true
+
+# SSL Configuration
+cloudflare_email: "{{ vault_cloudflare_email }}"
+cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
+
+# Pi-hole Configuration
+pihole_webpassword: "{{ vault_pihole_webpassword }}"
+pihole_timezone: Europe/Rome
+
+# Application directories
+app_directory: /opt/homelab
+config_directory: "{{ app_directory }}/config"
+data_directory: "{{ app_directory }}/data"
+
+# Container security settings
+container_security:
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - SETGID
+    - SETUID
+  security_opt:
+    - no-new-privileges:true
 
 # Environment variables for .env file
 compose_environment:
-  APP_ENV: production
-  DEBUG: "false"
-  LOG_LEVEL: warning
+  ENVIRONMENT: production
+  DOMAIN_NAME: "{{ domain_name }}"
+  CLOUDFLARE_EMAIL: "{{ cloudflare_email }}"
+  CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+  PIHOLE_WEBPASSWORD: "{{ pihole_webpassword }}"
+  TRAEFIK_LOG_LEVEL: "{{ traefik_log_level }}"
+  TZ: "{{ pihole_timezone }}"

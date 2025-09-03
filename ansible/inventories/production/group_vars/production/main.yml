@@ -1,0 +1,36 @@
+---
+# Production Environment Configuration
+environment: "production"
+domain_name: "prod.matteobaracetti.com"
+
+# Production-specific settings
+traefik_log_level: "WARN"
+enable_monitoring: true
+restart_policy: "unless-stopped"
+
+# Service deployment flags
+deploy_traefik: true
+deploy_pihole: true
+deploy_unbound: true
+deploy_uptime_kuma: true
+
+# Production SSL/TLS
+ssl_enabled: true
+lets_encrypt_enabled: true
+
+# Resource limits (production needs more stability)
+traefik_memory_limit: "512m"
+pihole_memory_limit: "256m"
+uptime_kuma_memory_limit: "256m"
+
+# Backup and monitoring
+enable_backup: true
+backup_retention_days: 30
+
+# Security
+security_headers_enabled: true
+rate_limiting_enabled: true
+
+# Proxmox Configuration (only in production)
+deploy_proxmox_routes: true
+proxmox_host: "192.168.178.70"

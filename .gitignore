@@ -1,37 +1,25 @@
-# Proxmox credentials
+# ===========================================
+# Homelab Project - Complete .gitignore
+# ===========================================
+
+# Proxmox and Packer credentials
 packer/credentials.pkr.hcl
 
-# SSH keys
+# SSH keys and certificates
 *.pem
 *.pub
+*.key
+*.crt
 id_rsa*
+authorized_keys
 
-# Packer
+# Packer build artifacts
 packer_cache/
 *.box
 packer-manifest.json
 .packer/
 
-# Temporary files and logs
-*.tmp
-*.log
-crash.log
-
-# Editors / IDEs
-.vscode/
-
-# OS files
-.DS_Store
-
-# Linux temporary/backups
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# Terraform - consolidated rules (applies to any terraform directory)
-# Ignore Terraform state, plans, lock and variable files
+# Terraform - comprehensive rules
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
@@ -47,25 +35,39 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
-crash.log
-crash.*.log
 
-# Ansible - consolidated rules
-# Ansible vault and sensitive files
+# Ansible sensitive files
 vault.yml
 vault_pass.txt
 *.vault
-
-# Ansible retry files and logs
 *.retry
 ansible.log
-
-# Ansible Galaxy collections and roles (if locally downloaded)
-collections/ansible_collections/
-roles/*/
-
-# Host-specific variables (may contain sensitive data)
+.ansible/
 host_vars/*/vault.yml
 
-# Ansible temporary files
-.ansible/
+# Temporary and log files
+*.tmp
+*.log
+crash.log
+crash.*.log
+
+# Development tools
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Build and cache directories
+node_modules/
+.cache/
+dist/
+build/
